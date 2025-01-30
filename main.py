@@ -26,6 +26,8 @@ if not firebase_admin._apps:
     cred = credentials.Certificate("ashok-88fd9-firebase-adminsdk-fbsvc-a87adc24e7.json")  # Replace with your Firebase Admin SDK JSON file
     firebase_admin.initialize_app(cred)
 
+
+
 def login():
     st.title("Login")
 
@@ -451,9 +453,9 @@ def map_wout_alt():
     
 def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
     
-    st.title("Priority Sheet")
+    st.title("Priority Analysis - P.NO with WIP, Description, and SUB1 Mapping")
 
-# File uploader
+    # File uploader
     data_file = st.file_uploader("Upload the Excel file", type=["xlsx"])
 
     if data_file is not None:
@@ -461,13 +463,18 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
             # Read the uploaded Excel file
             excel_data = pd.ExcelFile(data_file)
 
-            # Check if 'Priority format' sheet exists
-            if 'Priority format' in excel_data.sheet_names:
-                priority_df = excel_data.parse('Priority format')
+            # Convert sheet names to uppercase for case-insensitive matching
+            sheet_names_upper = {sheet_name.upper(): sheet_name for sheet_name in excel_data.sheet_names}
 
-                # Check if 'P.NO' column exists
+            # Check if 'Priority format' sheet exists
+            if 'PRIORITY FORMAT' in sheet_names_upper:
+                priority_df = excel_data.parse(sheet_names_upper['PRIORITY FORMAT'])
+                priority_df.columns = priority_df.columns.str.strip().str.upper()
+
                 if 'P.NO' in priority_df.columns:
                     part_no_column = priority_df[['P.NO']].drop_duplicates().reset_index(drop=True)
+                    part_no_column.index += 1  # Set serial numbers starting from 1
+                    part_no_column.index.name = "Serial Number"
                 else:
                     st.error("The 'P.NO' column was not found in the 'Priority format' sheet.")
                     part_no_column = None
@@ -476,142 +483,101 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
                 part_no_column = None
 
             # Check if 'Made Here Parts Calc' sheet exists
-            if 'Made Here Parts Calc' in excel_data.sheet_names:
-                made_here_df = excel_data.parse('Made Here Parts Calc')
+            if 'MADE HERE PARTS CALC' in sheet_names_upper:
+                made_here_df = excel_data.parse(sheet_names_upper['MADE HERE PARTS CALC'])
+                made_here_df.columns = made_here_df.columns.str.strip().str.upper()
 
-                # Check if required columns exist
-                required_columns = ['P.NO', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP', 'Desc']
+                required_columns = ['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT', 'DESC']
                 missing_columns = [col for col in required_columns if col not in made_here_df.columns]
 
                 if not missing_columns:
-                    # Use the columns required for mapping
-                    wip_data = made_here_df[required_columns]
-                    # Replace None values with 0
-                    wip_data.fillna(0, inplace=True)
+                    wip_data = made_here_df[required_columns].fillna(0)
                 else:
-                    st.error(f"The following columns were not found in the 'Made Here Parts Calc' sheet: {', '.join(missing_columns)}")
+                    st.error(f"Missing columns in 'Made Here Parts Calc': {', '.join(missing_columns)}")
                     wip_data = None
             else:
-                st.error("The 'Made Here Parts Calc' sheet was not found in the uploaded Excel file.")
+                st.error("The 'Made Here Parts Calc' sheet was not found.")
                 wip_data = None
 
             # Check if 'Alternate Part Master' sheet exists
-            if 'Alternate Part Master' in excel_data.sheet_names:
-                alternate_part_master_df = excel_data.parse('Alternate Part Master')
+            if 'ALTERNATE PART MASTER' in sheet_names_upper:
+                alternate_part_master_df = excel_data.parse(sheet_names_upper['ALTERNATE PART MASTER'])
+                alternate_part_master_df.columns = alternate_part_master_df.columns.str.strip().str.upper()
 
-                # Check if 'P.NO' and 'SUB1' columns exist
                 required_sub1_columns = ['P.NO', 'SUB1']
                 missing_sub1_columns = [col for col in required_sub1_columns if col not in alternate_part_master_df.columns]
 
                 if not missing_sub1_columns:
                     sub1_data = alternate_part_master_df[['P.NO', 'SUB1']].drop_duplicates().reset_index(drop=True)
                 else:
-                    st.error(f"The following columns were not found in the 'Alternate Part Master' sheet: {', '.join(missing_sub1_columns)}")
+                    st.error(f"Missing columns in 'Alternate Part Master': {', '.join(missing_sub1_columns)}")
                     sub1_data = None
             else:
-                st.error("The 'Alternate Part Master' sheet was not found in the uploaded Excel file.")
+                st.error("The 'Alternate Part Master' sheet was not found.")
                 sub1_data = None
 
-            # Check if 'Without_Alternate' sheet exists
-            if 'Without_Alternate' in excel_data.sheet_names:
-                without_alternate_df = excel_data.parse('Without_Alternate')
-
-                # Check if required columns exist
-                remaining_mh_columns = [
-                    '1ST ON MS', '2ND ON MS', '3RD ON MS', '4TH ON MS', '5TH ON MS', 'REV ON MS', 'CM ON LS', 'REV IDLER',
-                    '3RD ON LS', '4TH ON LS', '5TH ON LS', 'INPUT SHAFT', 'MAIN SHAFT', 'LAY SHAFT', 'HUB 1/ 2', 'HUB 3/4',
-                    'HUB 5/6', 'FDR', 'SLEEVE 1/ 2', 'SLEEVE 3/4', 'SLEEVE 5/6', 'CONE 1/2', 'CONE 3/4', 'CONE 5/6',
-                    'CONE 3', 'CONE 4'
-                ]
-
-                stacked_data = pd.DataFrame(columns=['P.NO', 'REMAINING MH'])
-
-                for column in remaining_mh_columns:
-                    remaining_column = f"REMAINING MH ({column})"
-                    if column in without_alternate_df.columns and remaining_column in without_alternate_df.columns:
-                        # Extract relevant data
-                        ms_data = without_alternate_df[[column, remaining_column]]
-
-                        # Drop rows with missing values
-                        ms_data.dropna(subset=[column, remaining_column], inplace=True)
-
-                        # Rename columns to standardize
-                        ms_data.columns = ['P.NO', 'REMAINING MH']
-
-                        # Append to the stacked data
-                        stacked_data = pd.concat([stacked_data, ms_data], ignore_index=True)
-                    else:
-                        st.warning(f"Columns '{column}' or '{remaining_column}' are missing in the 'Without_Alternate' sheet.")
-
-                # Aggregate the stacked data by summing up REMAINING MH for each P.NO
-                aggregated_stacked_data = stacked_data.groupby('P.NO', as_index=False).agg({
-                    'REMAINING MH': 'sum'
-                })
-
-                # Display the aggregated stacked data
-                # st.subheader("Aggregated Stacked Data: P.NO with Total Remaining MH")
-                # st.write(aggregated_stacked_data)
-
-            # Map the data
+            # Mapping Data
             if part_no_column is not None and wip_data is not None and sub1_data is not None:
-                # Replace None values with 0 in the part_no_column
-                part_no_column.fillna(0, inplace=True)
-
-                # Merge part.no with corresponding WIP columns and Desc column
                 mapped_data = part_no_column.merge(wip_data, on='P.NO', how='left')
-
-                # Merge with SUB1 column
                 mapped_data = mapped_data.merge(sub1_data, on='P.NO', how='left')
-
-                # Replace None values with 0 in the mapped data
                 mapped_data.fillna(0, inplace=True)
 
-                # Use SUB1 values to extract corresponding WIP data from 'Made Here Parts Calc'
-                sub1_wip_data = made_here_df[['P.NO', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP']]
-                sub1_wip_data.columns = ['SUB1', 'Hard WIP (2)', 'HT WIP (2)', 'Soft WIP (2)', 'Rough WIP (2)']
+                sub1_wip_data = made_here_df[['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT']]
+                sub1_wip_data.columns = ['SUB1', 'HARD WIP (2)', 'HT WIP (2)', 'SOFT WIP (2)', 'ROUGH WIP (2)','WFT (2)']
+                mapped_data = mapped_data.merge(sub1_wip_data, on='SUB1', how='left').fillna(0)
 
-                # Merge SUB1 WIP data into the mapped data
-                mapped_data = mapped_data.merge(sub1_wip_data, on='SUB1', how='left')
+                # Load Cycle Time Sheet if exists
+                if 'CYCLE TIME SHEET' in sheet_names_upper:
+                    cycle_time_df = excel_data.parse(sheet_names_upper['CYCLE TIME SHEET'])
+                    cycle_time_df.columns = cycle_time_df.columns.str.strip().str.upper()
 
-                # Replace None values with 0 in the final data
-                mapped_data.fillna(0, inplace=True)
+                    if {'P.NO', 'CYCLE TIME'}.issubset(cycle_time_df.columns):
+                        cycle_time_mapping = cycle_time_df.set_index('P.NO')['CYCLE TIME'].to_dict()
+                    else:
+                        cycle_time_mapping = {}
+                else:
+                    cycle_time_mapping = {}
 
-                # Update Remaining MH based on aggregated stacked data
-                def update_remaining_mh(row):
-                    matched_row = aggregated_stacked_data.loc[aggregated_stacked_data['P.NO'] == row['P.NO']]
-                    if not matched_row.empty:
-                        return matched_row.iloc[0]['REMAINING MH']
-                    return row['Remaining MH']
+                # Calculate 1st Priority
+                def calculate_1st_priority(row):
+                    cycle_time = cycle_time_mapping.get(row['SUB1'], None)
+                    if cycle_time is not None:
+                        if cycle_time < row['WFT'] or cycle_time == row['WFT']:
+                            return "Hard-TG"
+                    if row['WFT'] > 100:
+                        return "Hard-TG"
+                    return ""
 
-                mapped_data['Remaining MH'] = mapped_data.apply(update_remaining_mh, axis=1)
+                mapped_data['1st Priority'] = mapped_data.apply(calculate_1st_priority, axis=1)
 
-                # Final column order with renamed appended columns to avoid duplicates
-                final_columns = ['P.NO', 'Remaining MH', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP', 'Desc', 'SUB1', 
-                                'Hard WIP (2)', 'HT WIP (2)', 'Soft WIP (2)', 'Rough WIP (2)', 
-                                'P.NO (Appended)', 'Hard WIP (Appended)']
+                # Calculate 2nd Priority
+                def calculate_2nd_priority(row):
+                    if row['HT WIP'] > row['HARD WIP']:
+                        return "Hard"
+                    elif row['SOFT WIP'] + row['HT WIP'] > row['HARD WIP']:
+                        return "HT"
+                    elif row['SOFT WIP'] + row['HT WIP'] + row['ROUGH WIP'] + row['WFT'] > row['HARD WIP']:
+                        return "Soft & HT"
+                    elif row['SOFT WIP'] + row['HT WIP'] + row['ROUGH WIP'] + row['WFT'] < row['HARD WIP']:
+                        return "Soft"
+                    return "Rough"
 
-                # Renaming the appended columns
-                mapped_data['P.NO (Appended)'] = mapped_data['P.NO']
-                mapped_data['Hard WIP (Appended)'] = mapped_data['Hard WIP']
+                mapped_data['2nd Priority'] = mapped_data.apply(calculate_2nd_priority, axis=1)
+                
+                # Combine 1st & 2nd Priority
+                mapped_data['1st&2nd Priority'] = mapped_data['1st Priority'] + " & " + mapped_data['2nd Priority']
 
-                # Selecting the updated columns for final output
+                final_columns = ['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT', 'DESC', 'SUB1', 
+                                'HARD WIP (2)', 'HT WIP (2)', 'SOFT WIP (2)', 'ROUGH WIP (2)','WFT (2)',
+                                '1st Priority', '2nd Priority', '1st&2nd Priority']
+
                 mapped_data = mapped_data[final_columns]
+                mapped_data.reset_index(inplace=True, drop=True)
+                mapped_data.index += 1
+                mapped_data.index.name = "Serial Number"
 
-                # Display the mapped data
                 st.subheader("Mapped Data: P.NO with WIP, Description, and SUB1 Columns")
                 st.write(mapped_data)
-            elif part_no_column is not None:
-                # Replace None values with 0 in the part_no_column
-                part_no_column.fillna(0, inplace=True)
-
-                st.subheader("Extracted 'P.NO' Column from Priority format Sheet (Duplicates Removed)")
-                st.write(part_no_column)
-            elif wip_data is not None:
-                st.subheader("Extracted WIP and Desc Columns from Made Here Parts Calc Sheet (Duplicates Removed)")
-                st.write(wip_data)
-            elif sub1_data is not None:
-                st.subheader("Extracted SUB1 Column from Alternate Part Master Sheet (Duplicates Removed)")
-                st.write(sub1_data)
 
         except Exception as e:
             st.error(f"An error occurred while processing the file: {e}")
@@ -620,26 +586,25 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
         ws = wb.active
         ws.title = "Processed Data"
 
-                    # Write DataFrame to the worksheet
+                # Write DataFrame to the worksheet
         for row in dataframe_to_rows(mapped_data, index=False, header=True):
             ws.append(row)
 
-                    # Save the workbook to the BytesIO object
-            wb.save(output)
-            processed_file = output.getvalue()
+                # Save the workbook to the BytesIO object
+        wb.save(output)
+        processed_file = output.getvalue()
 
         st.download_button(
-            label="Download Processed Excel",
-            data=processed_file,
-            file_name="Priority Sheet.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )    
+                    label="Download Priority sheet Excel",
+                    data=processed_file,
+                    file_name="Priority sheet.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
     else:
         st.info("Please upload an Excel file to proceed.")
-
-    
 def process_part_matrix_master():
-    st.title("Made here parts calculation")
+    st.title("made here part calculation")
     st.write("UEpload an Excel file, and we'll process the 'Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here' sheets for you.")
 
     # File uploader
@@ -719,14 +684,16 @@ def process_part_matrix_master():
                     filtered_date_wise_df = date_wise_df[date_wise_df['Date'] == selected_date]
 
                     # Add the required columns to 'Part Matrix Master'
-                    if {'Current MH', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP'}.issubset(filtered_date_wise_df.columns):
+                    if {'Current MH', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP','Hard Wating For teeth'}.issubset(filtered_date_wise_df.columns):
                         part_matrix_df['Current MH'] = filtered_date_wise_df['Current MH'].values
                         part_matrix_df['Hard WIP'] = filtered_date_wise_df['Hard WIP'].values
                         part_matrix_df['HT WIP'] = filtered_date_wise_df['HT WIP'].values
                         part_matrix_df['Soft WIP'] = filtered_date_wise_df['Soft WIP'].values
                         part_matrix_df['Rough WIP'] = filtered_date_wise_df['Rough WIP'].values
+                        part_matrix_df['Hard Wating For teeth'] = filtered_date_wise_df['Hard Wating For teeth'].values
 
                         # Rename 'Current MH' to 'Store Finished'
+                        part_matrix_df.rename(columns={'Hard Wating For teeth': 'WFT'}, inplace=True)
                         part_matrix_df.rename(columns={'Current MH': 'Store Finished'}, inplace=True)
                     else:
                         st.warning("Some required columns are missing in 'Date wise made here'.")
@@ -754,7 +721,7 @@ def process_part_matrix_master():
                 st.download_button(
                     label="Download Processed Excel",
                     data=processed_file,
-                    file_name="Made Here Parts Calculation.xlsx",
+                    file_name="processed_part_matrix_master.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
@@ -962,8 +929,87 @@ def map_w_alt():
 
 
 def main():
+    st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: #ffffff;
+    }
+    
+    [data-testid="stSidebar"] {
+        background: linear-gradient(195deg, #1a1a2e 0%, #16213e 100%) !important;
+        border-right: 1px solid #2a529850;
+    }
+
+    /* Text color adjustments */
+    .stTextInput>label, .stNumberInput>label, .stSelectbox>label,
+    .stRadio>label, .stMarkdown, .stTitle {
+        color: #ffffff !important;
+    }
+
+    /* Input field hover and focus effects */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        transition: all 0.3s ease !important;
+        background-color: rgba(125, 214, 235, 0.57) !important;
+        border: 1px solidrgba(200, 12, 217, 0.31) !important;
+    }
+
+    .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover {
+        background-color: rgba(255, 255, 255, 0.94) !important;
+        transform: scale(1.02);
+    }
+
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        color:black;
+        
+       
+        transform: scale(1.02);
+    }
+
+    /* Button styling */
+.stButton>button {
+    background: linear-gradient(45deg, #4CAF50 0%, #45a049 100%);
+    color: white !important;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 24px;
+    transition: all 0.3s ease !important;
+}
+
+.stButton>button:hover {
+    background: linear-gradient(45deg, #2196F3 0%, #1976D2 100%) !important;
+    transform: scale(1.05);
+    opacity: 0.9;
+}
+
+    /* Container styling */
+    .stContainer {
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        backdrop-filter: blur(5px);
+    }
+
+    /* Dataframe styling */
+    .dataframe {
+        background-color: rgba(23, 137, 195, 0.1) !important;
+    }
+
+    /* Hover effects */
+    .stButton>button:hover {
+        transform: scale(1.05);
+        opacity: 0.9;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+    )
+    
+    
     st.sidebar.title("Navigation")
-    menu = ["Login", "Register", "Logout", "App Functionality"]
+    menu = ["Login", "Register", "Logout", "Dashboard"]
     choice = st.sidebar.selectbox("Menu", menu)
 
     if choice == "Login":
@@ -972,7 +1018,7 @@ def main():
         register()
     elif choice == "Logout":
         logout()
-    elif choice == "App Functionality":
+    elif choice == "Dashboard":
         app_functionality()
 
 # Define the other functions here (e.g., Gbreq, Month, etc.)
