@@ -70,22 +70,63 @@ def logout():
         st.success("Logged out successfully!")
         
 def app_functionality():
+    
     if "user" not in st.session_state:
         st.warning("Please log in to access the app.")
-        return
+        st.stop()  # Use st.stop() instead of return in Streamlit
 
+    # Initialize session state for tracking the selected option
+    if "selected_option" not in st.session_state:
+        st.session_state.selected_option = None
+
+    # Sidebar title
     st.sidebar.title("Choose a Functionality")
+
+    # Define functionalities
     options = {
         "Made here parts calculation": process_part_matrix_master,
         "Priority Sheet": Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping,
-        "Mapped set avilable with out consider alternates": map_wout_alt,
-        "Mapped set avilable with consider alternates": map_w_alt,
         "Month GB Requirement After OS": Month,
-        "GB Requirement For Bal Month": Gbreq
+        "GB Requirement For Bal Month": Gbreq,
+        "Mapped set available without considering alternates": map_wout_alt,
+        "Mapped set available considering alternates": map_w_alt,
+        "MPS Plan - 2 Weeks": None,  # Placeholder
+        "MPS Plan - 4 Weeks": None   # Placeholder
     }
 
-    choice = st.sidebar.radio("Select a process", list(options.keys()))
-    options[choice]()
+    # Function to update selection
+    def update_selection(selection):
+        st.session_state.selected_option = selection
+
+    # Creating collapsible sections (dropdowns) with buttons
+    with st.sidebar.expander("Matched Set"):
+        if st.button("Made here parts calculation"):
+            update_selection("Made here parts calculation")
+        if st.button("Priority Sheet"):
+            update_selection("Priority Sheet")
+        if st.button("Month GB Requirement After OS"):
+            update_selection("Month GB Requirement After OS")
+        if st.button("GB Requirement For Bal Month"):
+            update_selection("GB Requirement For Bal Month")
+
+    with st.sidebar.expander("Against Tentative Plan"):
+        if st.button("Matched set available without considering alternates"):
+            update_selection("Mapped set available without considering alternates")
+        if st.button("Matched set available considering alternates"):
+            update_selection("Mapped set available considering alternates")
+
+    with st.sidebar.expander("Against MPS -2 weeks"):
+        if st.button("MPS Plan - 2 Weeks"):
+            update_selection("MPS Plan - 2 Weeks")
+
+    with st.sidebar.expander("Against MPS -4 weeks"):
+        if st.button("MPS Plan - 4 Weeks"):
+            update_selection("MPS Plan - 4 Weeks")
+
+    # Render only the selected function
+    if st.session_state.selected_option in options and options[st.session_state.selected_option]:
+        options[st.session_state.selected_option]()
+
 
 
 def Gbreq():
@@ -282,7 +323,7 @@ def Month():
                 
 def map_wout_alt():
     # Title for the Streamlit app
-    st.title("Mapped set avilable with out consider alternates ")
+    st.title("Matched set avilable with out consider alternates ")
 
     # File uploader for user to upload an Excel file
     uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"],key="mapset")
@@ -732,7 +773,7 @@ def process_part_matrix_master():
         #     st.error(f"An error occurred: {e}")
 
 def map_w_alt():
-    st.title("Mapped set avilable with consider alternates")
+    st.title("Matched set avilable with consider alternates")
     
 
 # File uploader for user to upload an Excel file
