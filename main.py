@@ -6,6 +6,9 @@ import pandas as pd
 import io
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
+import uuid
+from io import BytesIO
+unique_key = str(uuid.uuid4())
 
 
 firebaseConfig = {
@@ -69,65 +72,891 @@ def logout():
         del st.session_state["user"]
         st.success("Logged out successfully!")
         
+
+
 def app_functionality():
-    
+    # Ensure user is logged in
     if "user" not in st.session_state:
         st.warning("Please log in to access the app.")
-        st.stop()  # Use st.stop() instead of return in Streamlit
+        st.stop()
 
-    # Initialize session state for tracking the selected option
+    # Initialize session state variables
     if "selected_option" not in st.session_state:
         st.session_state.selected_option = None
 
-    # Sidebar title
     st.sidebar.title("Choose a Functionality")
 
-    # Define functionalities
+    # Define available options
     options = {
-        "Made here parts calculation": process_part_matrix_master,
-        "Priority Sheet": Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping,
-        "Month GB Requirement After OS": Month,
-        "GB Requirement For Bal Month": Gbreq,
         "Mapped set available without considering alternates": map_wout_alt,
         "Mapped set available considering alternates": map_w_alt,
-        "MPS Plan - 2 Weeks": None,  # Placeholder
-        "MPS Plan - 4 Weeks": None   # Placeholder
+        
+        "MPS Plan - 2 Weeks with Alternates": two_week_w_al,
+        "MPS Plan - 2 Weeks without Alternates": two_week_wo_al,
+     
+        "MPS Plan - 4 Weeks with Alternates": four_week_with_alter,
+        "MPS Plan - 4 Weeks without Alternates": four_week_without_alter,
+        "Part Calculation": process_part_matrix_master,
+        "Priority Sheet": Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping,
+        "Month GB Req After OS": Month,
+        "GB Req for Balance Month": Gbreq
     }
 
     # Function to update selection
     def update_selection(selection):
         st.session_state.selected_option = selection
 
-    # Creating collapsible sections (dropdowns) with buttons
+    # Sidebar expander for Matched Set
     with st.sidebar.expander("Matched Set"):
-        if st.button("Made here parts calculation"):
-            update_selection("Made here parts calculation")
-        if st.button("Priority Sheet"):
-            update_selection("Priority Sheet")
-        if st.button("Month GB Requirement After OS"):
-            update_selection("Month GB Requirement After OS")
-        if st.button("GB Requirement For Bal Month"):
-            update_selection("GB Requirement For Bal Month")
-
-    with st.sidebar.expander("Against Tentative Plan"):
-        if st.button("Matched set available without considering alternates"):
+        st.markdown("**Against Tentative Plan**")
+        if st.button("Without Alternates", key="without_alt"):
             update_selection("Mapped set available without considering alternates")
-        if st.button("Matched set available considering alternates"):
+        if st.button("With Alternates", key="with_alt"):
             update_selection("Mapped set available considering alternates")
 
-    with st.sidebar.expander("Against MPS -2 weeks"):
-        if st.button("MPS Plan - 2 Weeks"):
-            update_selection("MPS Plan - 2 Weeks")
+        st.markdown("**Against MPS - 2 Weeks**")
+        
+        if st.button("2-Week Plan with Alternates", key="2_week_alt"):
+            update_selection("MPS Plan - 2 Weeks with Alternates")
+        if st.button("2-Week Plan without Alternates", key="2_week_wout_alt"):
+            update_selection("MPS Plan - 2 Weeks without Alternates")
 
-    with st.sidebar.expander("Against MPS -4 weeks"):
-        if st.button("MPS Plan - 4 Weeks"):
-            update_selection("MPS Plan - 4 Weeks")
+        st.markdown("**Against MPS - 4 Weeks**")
+        
+        if st.button("4-Week Plan with Alternates", key="4_week_alt"):
+            update_selection("MPS Plan - 4 Weeks with Alternates")
+        if st.button("4-Week Plan without Alternates", key="4_week_wout_alt"):
+            update_selection("MPS Plan - 4 Weeks without Alternates")
 
-    # Render only the selected function
-    if st.session_state.selected_option in options and options[st.session_state.selected_option]:
-        options[st.session_state.selected_option]()
+    # Sidebar expander for Additional Calculations
+    with st.sidebar.expander("Additional Calculations"):
+        if st.button("Part Calculation", key="part_calc"):
+            update_selection("Part Calculation")
+        if st.button("Priority Sheet", key="priority_sheet"):
+            update_selection("Priority Sheet")
+        if st.button("Month GB Req After OS", key="month_gb_req"):
+            update_selection("Month GB Req After OS")
+        if st.button("GB Req for Balance Month", key="gb_req_bal_month"):
+            update_selection("GB Req for Balance Month")
+
+    # **Render the selected functionality**
+    selected = st.session_state.selected_option
+    if selected:
+        st.write(f"### Running: {selected}")
+        if selected in options and options[selected]:  
+            options[selected]()  # Call the corresponding function
+        else:
+            st.warning("Functionality not yet implemented.")
+            
+            
+def two_week_w_al():
+    # Title of the app
+    st.title('2-week-with-alternative')
+
+    # File uploader widget to upload the Excel file
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+
+    if uploaded_file is not None:
+        # Load the Excel file
+        try:
+            # Load all sheet names and match case-insensitively by converting them to lowercase
+            sheet_names = pd.ExcelFile(uploaded_file).sheet_names
+            
+            # Convert sheet names to lowercase for case-insensitive comparison
+            target_sheet_name_1 = "GB Requirement for Bal Month".lower()
+            target_sheet_name_2 = "Part Raw Data".lower()
+            target_sheet_name_3 = "Made Here Parts Calc".lower()
+            target_sheet_name_4 = "Alternate Part Master".lower()
+            
+            matching_sheets_1 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_1]
+            matching_sheets_2 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_2]
+            matching_sheets_3 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_3]
+            matching_sheets_4 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_4]
+            
+            if matching_sheets_1 and matching_sheets_2 and matching_sheets_3 and matching_sheets_4:
+                # Read the matched sheets
+                df_1 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_1[0])
+                df_2 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_2[0])
+                df_3 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_3[0])
+                df_4 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_4[0])
+
+                # Clean column names: remove leading/trailing spaces and make them case-insensitive
+                df_1.columns = df_1.columns.str.strip().str.lower()
+                df_2.columns = df_2.columns.str.strip().str.lower()
+                df_3.columns = df_3.columns.str.strip().str.lower()
+                df_4.columns = df_4.columns.str.strip().str.lower()
+
+                # Check if 'spe' column exists in both sheets
+                if 'spe' in df_1.columns and 'spe' in df_2.columns:
+                    # Merge the two dataframes based on 'spe'
+                    merged_data = pd.merge(df_1[['spe', 'w2 rev']], df_2, on='spe', how='inner')
+                    
+                    # List of the required columns from the Part Raw Data sheet
+                    required_columns = [
+                        '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                        'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                        'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                        'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                    ]
+
+                    # Check if all required columns are present
+                    missing_columns = [col for col in required_columns if col not in merged_data.columns]
+                    if missing_columns:
+                        st.error(f"Missing columns in Part Raw Data: {', '.join(missing_columns)}")
+                    else:
+                        # Select only the relevant columns and add Serial Number starting from 1
+                        filtered_data = merged_data[['spe', 'w2 rev'] + required_columns]
+                        
+                        # Replace None or NaN with 0 in the filtered data
+                        filtered_data = filtered_data.fillna(0)
+
+                        # Add Serial Number starting from 1
+                        filtered_data.insert(0, 'Serial Number', range(1, len(filtered_data) + 1))
+
+                        # --- New functionality for "Made Here Parts Calc" sheet ---
+
+                        # Extract P.NO and CURRENT MH columns from "Made Here Parts Calc"
+                        if 'p.no' in df_3.columns and 'current mh' in df_3.columns:
+                            made_here_parts_calc_df = df_3[['p.no', 'current mh']]
+
+                            # Track remaining stock using P.NO
+                            remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                            # Function to calculate CURRENT MH and REMAINING MH row-wise for each part and column
+                            def calculate_row_current_and_remaining(row, column):
+                                part_id = row[column]
+                                if part_id in remaining_stock:
+                                    available_mh = remaining_stock[part_id]
+                                    current_mh = min(row["w2 rev"], available_mh)  # Choose the min between W2 REV and available MH
+                                    remaining_stock[part_id] -= current_mh  # Update remaining stock
+                                    return current_mh
+                                return 0
+
+                            # Columns to process (the ones that start with 'F' like '1st on ms', '2nd on ms', etc.)
+                            columns_to_process = [
+                                '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                                'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                                'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                                'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                            ]
+
+                            # Calculate CURRENT MH and REMAINING MH for all components
+                            for col in columns_to_process:
+                                # Calculate CURRENT MH for each part (using the `calculate_row_current_and_remaining` function)
+                                filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                    lambda row: calculate_row_current_and_remaining(row, col), axis=1
+                                )
+
+                                # Calculate REMAINING MH as W2 REV - CURRENT MH
+                                filtered_data[f"REMAINING MH ({col})"] = (
+                                    filtered_data["w2 rev"] - filtered_data[f"CURRENT MH ({col})"]
+                                )
+
+                            # --- New functionality for "Alternate Part Master" sheet ---
+
+                            if 'p.no' in df_4.columns and 'sub1' in df_4.columns and 'sub2' in df_4.columns:
+                                alternate_part_master_df = df_4[['p.no', 'sub1', 'sub2']]
+
+                                # Step 3: Map P.NO to SUB1 and SUB2 for each column
+                                alternate_part_dict = alternate_part_master_df.set_index("p.no")[["sub1", "sub2"]].to_dict("index")
+
+                                for col in columns_to_process:
+                                    filtered_data[f"SUB1 ({col})"] = filtered_data[col].map(
+                                        lambda x: alternate_part_dict[x]["sub1"] if x in alternate_part_dict else 0
+                                    )
+                                    filtered_data[f"SUB2 ({col})"] = filtered_data[col].map(
+                                        lambda x: alternate_part_dict[x]["sub2"] if x in alternate_part_dict else 0
+                                    )
+
+                                # Step 4: Calculate CURRENT MH for each column
+                                remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                                def calculate_row_current(row, column):
+                                    key = row[column]
+                                    if key in remaining_stock:
+                                        available_mh = remaining_stock[key]
+                                        used_mh = min(row["w2 rev"], available_mh)
+                                        remaining_stock[key] -= used_mh
+                                        return used_mh
+                                    return 0
+
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                        lambda row: calculate_row_current(row, col), axis=1
+                                    )
+
+                                # Step 5: Calculate CURRENT MH for SUB1
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH (SUB1 {col})"] = filtered_data.apply(
+                                        lambda row: max(row["w2 rev"] - row[f"CURRENT MH ({col})"], 0), axis=1
+                                    )
+
+                                # Step 6: Calculate CURRENT MH for SUB2
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH (SUB2 {col})"] = filtered_data.apply(
+                                        lambda row: max(row[f"CURRENT MH ({col})"] + row[f"CURRENT MH (SUB1 {col})"] - row["w2 rev"], 0), axis=1
+                                    )
+
+                            else:
+                                st.error('Columns "P.NO", "SUB1" or "SUB2" not found in the "Alternate Part Master" sheet.')
+
+                            # --- Step 7: Calculate the minimum CURRENT MH for each row, excluding zero-value columns ---
+                            def calculate_min_current_mh(row):
+                                non_zero_values = [
+                                    row[f"CURRENT MH ({col})"] for col in columns_to_process
+                                    if row[col] != 0
+                                ]
+                                return min(non_zero_values) if non_zero_values else 0
+
+                            filtered_data["MINIMUM CURRENT MH"] = filtered_data.apply(
+                                calculate_min_current_mh, axis=1
+                            )
+
+                            # Replace any remaining NaN or None values with 0
+                            filtered_data = filtered_data.fillna(0)
+
+                            # Re-arranging the columns as per the given order
+                            final_columns = [
+                                'spe', 'w2 rev', 'MINIMUM CURRENT MH', 
+                                '1st on ms', 'CURRENT MH (1st on ms)', 'SUB1 (1st on ms)', 'CURRENT MH (SUB1 1st on ms)', 'SUB2 (1st on ms)', 'CURRENT MH (SUB2 1st on ms)',
+                                '2nd on ms', 'CURRENT MH (2nd on ms)', 'SUB1 (2nd on ms)', 'CURRENT MH (SUB1 2nd on ms)', 'SUB2 (2nd on ms)', 'CURRENT MH (SUB2 2nd on ms)',
+                                '3rd on ms', 'CURRENT MH (3rd on ms)', 'SUB1 (3rd on ms)', 'CURRENT MH (SUB1 3rd on ms)', 'SUB2 (3rd on ms)', 'CURRENT MH (SUB2 3rd on ms)',
+                                '4th on ms', 'CURRENT MH (4th on ms)', 'SUB1 (4th on ms)', 'CURRENT MH (SUB1 4th on ms)', 'SUB2 (4th on ms)', 'CURRENT MH (SUB2 4th on ms)',
+                                '5th on ms', 'CURRENT MH (5th on ms)', 'SUB1 (5th on ms)', 'CURRENT MH (SUB1 5th on ms)', 'SUB2 (5th on ms)', 'CURRENT MH (SUB2 5th on ms)',
+                                'rev on ms', 'CURRENT MH (rev on ms)', 'SUB1 (rev on ms)', 'CURRENT MH (SUB1 rev on ms)', 'SUB2 (rev on ms)', 'CURRENT MH (SUB2 rev on ms)',
+                                'cm on ls', 'CURRENT MH (cm on ls)', 'SUB1 (cm on ls)', 'CURRENT MH (SUB1 cm on ls)', 'SUB2 (cm on ls)', 'CURRENT MH (SUB2 cm on ls)',
+                                'rev idler', 'CURRENT MH (rev idler)', 'SUB1 (rev idler)', 'CURRENT MH (SUB1 rev idler)', 'SUB2 (rev idler)', 'CURRENT MH (SUB2 rev idler)',
+                                '3rd on ls', 'CURRENT MH (3rd on ls)', 'SUB1 (3rd on ls)', 'CURRENT MH (SUB1 3rd on ls)', 'SUB2 (3rd on ls)', 'CURRENT MH (SUB2 3rd on ls)',
+                                '4th on ls', 'CURRENT MH (4th on ls)', 'SUB1 (4th on ls)', 'CURRENT MH (SUB1 4th on ls)', 'SUB2 (4th on ls)', 'CURRENT MH (SUB2 4th on ls)',
+                                '5th on ls', 'CURRENT MH (5th on ls)', 'SUB1 (5th on ls)', 'CURRENT MH (SUB1 5th on ls)', 'SUB2 (5th on ls)', 'CURRENT MH (SUB2 5th on ls)',
+                                'input shaft', 'CURRENT MH (input shaft)', 'SUB1 (input shaft)', 'CURRENT MH (SUB1 input shaft)', 'SUB2 (input shaft)', 'CURRENT MH (SUB2 input shaft)',
+                                'main shaft', 'CURRENT MH (main shaft)', 'SUB1 (main shaft)', 'CURRENT MH (SUB1 main shaft)', 'SUB2 (main shaft)', 'CURRENT MH (SUB2 main shaft)',
+                                'lay shaft', 'CURRENT MH (lay shaft)', 'SUB1 (lay shaft)', 'CURRENT MH (SUB1 lay shaft)', 'SUB2 (lay shaft)', 'CURRENT MH (SUB2 lay shaft)',
+                                'hub 1/ 2', 'CURRENT MH (hub 1/ 2)', 'SUB1 (hub 1/ 2)', 'CURRENT MH (SUB1 hub 1/ 2)', 'SUB2 (hub 1/ 2)', 'CURRENT MH (SUB2 hub 1/ 2)',
+                                'hub 3/4', 'CURRENT MH (hub 3/4)', 'SUB1 (hub 3/4)', 'CURRENT MH (SUB1 hub 3/4)', 'SUB2 (hub 3/4)', 'CURRENT MH (SUB2 hub 3/4)',
+                                'hub 5/6', 'CURRENT MH (hub 5/6)', 'SUB1 (hub 5/6)', 'CURRENT MH (SUB1 hub 5/6)', 'SUB2 (hub 5/6)', 'CURRENT MH (SUB2 hub 5/6)',
+                                'fdr', 'CURRENT MH (fdr)', 'SUB1 (fdr)', 'CURRENT MH (SUB1 fdr)', 'SUB2 (fdr)', 'CURRENT MH (SUB2 fdr)',
+                                'sleeve 1/ 2', 'CURRENT MH (sleeve 1/ 2)', 'SUB1 (sleeve 1/ 2)', 'CURRENT MH (SUB1 sleeve 1/ 2)', 'SUB2 (sleeve 1/ 2)', 'CURRENT MH (SUB2 sleeve 1/ 2)',
+                                'sleeve 3/4', 'CURRENT MH (sleeve 3/4)', 'SUB1 (sleeve 3/4)', 'CURRENT MH (SUB1 sleeve 3/4)', 'SUB2 (sleeve 3/4)', 'CURRENT MH (SUB2 sleeve 3/4)',
+                                'sleeve 5/6', 'CURRENT MH (sleeve 5/6)', 'SUB1 (sleeve 5/6)', 'CURRENT MH (SUB1 sleeve 5/6)', 'SUB2 (sleeve 5/6)', 'CURRENT MH (SUB2 sleeve 5/6)',
+                                'cone 1/2', 'CURRENT MH (cone 1/2)', 'SUB1 (cone 1/2)', 'CURRENT MH (SUB1 cone 1/2)', 'SUB2 (cone 1/2)', 'CURRENT MH (SUB2 cone 1/2)',
+                                'cone 3/4', 'CURRENT MH (cone 3/4)', 'SUB1 (cone 3/4)', 'CURRENT MH (SUB1 cone 3/4)', 'SUB2 (cone 3/4)', 'CURRENT MH (SUB2 cone 3/4)',
+                                'cone 5/6', 'CURRENT MH (cone 5/6)', 'SUB1 (cone 5/6)', 'CURRENT MH (SUB1 cone 5/6)', 'SUB2 (cone 5/6)', 'CURRENT MH (SUB2 cone 5/6)',
+                                'cone 3', 'CURRENT MH (cone 3)', 'SUB1 (cone 3)', 'CURRENT MH (SUB1 cone 3)', 'SUB2 (cone 3)', 'CURRENT MH (SUB2 cone 3)',
+                                'cone 4', 'CURRENT MH (cone 4)', 'SUB1 (cone 4)', 'CURRENT MH (SUB1 cone 4)', 'SUB2 (cone 4)', 'CURRENT MH (SUB2 cone 4)'
+                            ]
+
+                            # Reorder columns based on final_columns order
+                            filtered_2_w_al = filtered_data[final_columns]
+                            
+
+                            # Display the final DataFrame
+                            st.dataframe(filtered_2_w_al)
+                            output = io.BytesIO()
+                            wb = Workbook()
+                            ws = wb.active
+                            ws.title = "Processed Data"
+
+                                # Write DataFrame to the worksheet
+                            for row in dataframe_to_rows(filtered_2_w_al, index=False, header=True):
+                                ws.append(row)
+
+                                # Save the workbook to the BytesIO object
+                            wb.save(output)
+                            processed_file = output.getvalue()
+
+                            st.download_button(
+                                label="Download Processed Excel",
+                                data=processed_file,
+                                file_name="2_week_with_alternative.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+
+                        else:
+                            st.error('Error: Missing "P.NO", "SUB1", or "SUB2" columns in the Alternate Part Master sheet.')
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+def two_week_wo_al():
+    # Title of the app
+    st.title('2-week-without-alternative')
+
+    # File uploader widget to upload the Excel file
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+
+    if uploaded_file is not None:
+        # Load the Excel file
+        try:
+            # Load all sheet names and match case-insensitively by converting them to lowercase
+            sheet_names = pd.ExcelFile(uploaded_file).sheet_names
+
+            # Convert sheet names to lowercase for case-insensitive comparison
+            target_sheet_name_1 = "GB Requirement for Bal Month".lower()
+            target_sheet_name_2 = "Part Raw Data".lower()
+            target_sheet_name_3 = "Made Here Parts Calc".lower()
+
+            matching_sheets_1 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_1]
+            matching_sheets_2 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_2]
+            matching_sheets_3 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_3]
+
+            if matching_sheets_1 and matching_sheets_2 and matching_sheets_3:
+                # Read the matched sheets
+                df_1 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_1[0])
+                df_2 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_2[0])
+                df_3 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_3[0])
+
+                # Clean column names: remove leading/trailing spaces and make them case-insensitive
+                df_1.columns = df_1.columns.str.strip().str.lower()
+                df_2.columns = df_2.columns.str.strip().str.lower()
+                df_3.columns = df_3.columns.str.strip().str.lower()
+
+                # Check if 'spe' column exists in both sheets
+                if 'spe' in df_1.columns and 'spe' in df_2.columns:
+                    # Merge the two dataframes based on 'spe'
+                    merged_data = pd.merge(df_1[['spe', 'w2 rev']], df_2, on='spe', how='inner')
+
+                    # List of the required columns from the Part Raw Data sheet
+                    required_columns = [
+                        '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                        'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                        'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                        'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                    ]
+
+                    # Check if all required columns are present
+                    missing_columns = [col for col in required_columns if col not in merged_data.columns]
+                    if missing_columns:
+                        st.error(f"Missing columns in Part Raw Data: {', '.join(missing_columns)}")
+                    else:
+                        # Select only the relevant columns and add Serial Number starting from 1
+                        filtered_data = merged_data[['spe', 'w2 rev'] + required_columns]
+
+                        # Replace None or NaN with 0 in the filtered data
+                        filtered_data = filtered_data.fillna(0)
+
+                        # Add Serial Number starting from 1
+                        filtered_data.insert(0, 'Serial Number', range(1, len(filtered_data) + 1))
+
+                        # --- New functionality for "Made Here Parts Calc" sheet ---
+
+                        # Extract P.NO and CURRENT MH columns from "Made Here Parts Calc"
+                        if 'p.no' in df_3.columns and 'current mh' in df_3.columns:
+                            made_here_parts_calc_df = df_3[['p.no', 'current mh']]
+
+                            # Track remaining stock using P.NO
+                            remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                            # Function to calculate CURRENT MH and REMAINING MH row-wise for each part and column
+                            def calculate_row_current_and_remaining(row, column):
+                                part_id = row[column]
+                                if part_id in remaining_stock:
+                                    available_mh = remaining_stock[part_id]
+                                    current_mh = min(row["w2 rev"], available_mh)  # Choose the min between W2 REV and available MH
+                                    remaining_stock[part_id] -= current_mh  # Update remaining stock
+                                    return current_mh
+                                return 0
+
+                            # Columns to process (the ones that start with 'F' like '1st on ms', '2nd on ms', etc.)
+                            columns_to_process = [
+                                '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                                'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                                'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                                'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                            ]
+
+                            # Calculate CURRENT MH and REMAINING MH for all components
+                            for col in columns_to_process:
+                                # Calculate CURRENT MH for each part (using the `calculate_row_current_and_remaining` function)
+                                filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                    lambda row: calculate_row_current_and_remaining(row, col), axis=1
+                                )
+
+                                # Calculate REMAINING MH as W2 REV - CURRENT MH
+                                filtered_data[f"REMAINING MH ({col})"] = (
+                                    filtered_data["w2 rev"] - filtered_data[f"CURRENT MH ({col})"]
+                                )
+
+                            # --- Step 4: Calculate the minimum CURRENT MH for each row ---
+                            def calculate_min_current_mh(row):
+                                non_zero_values = [
+                                    row[f"CURRENT MH ({col})"] for col in columns_to_process
+                                    if row[f"CURRENT MH ({col})"] != 0
+                                ]
+                                return min(non_zero_values) if non_zero_values else 0
+
+                            filtered_data["MINIMUM CURRENT MH"] = filtered_data.apply(
+                                calculate_min_current_mh, axis=1
+                            )
+
+                            # Re-arranging the columns as per the given order
+                            final_columns = [
+                                'spe', 'w2 rev','MINIMUM CURRENT MH','1st on ms', 'CURRENT MH (1st on ms)', 'REMAINING MH (1st on ms)',
+                                '2nd on ms', 'CURRENT MH (2nd on ms)', 'REMAINING MH (2nd on ms)', '3rd on ms', 'CURRENT MH (3rd on ms)', 'REMAINING MH (3rd on ms)',
+                                '4th on ms', 'CURRENT MH (4th on ms)', 'REMAINING MH (4th on ms)', '5th on ms', 'CURRENT MH (5th on ms)', 'REMAINING MH (5th on ms)',
+                                'rev on ms', 'CURRENT MH (rev on ms)', 'REMAINING MH (rev on ms)', 'cm on ls', 'CURRENT MH (cm on ls)', 'REMAINING MH (cm on ls)',
+                                'rev idler', 'CURRENT MH (rev idler)', 'REMAINING MH (rev idler)', '3rd on ls', 'CURRENT MH (3rd on ls)', 'REMAINING MH (3rd on ls)',
+                                '4th on ls', 'CURRENT MH (4th on ls)', 'REMAINING MH (4th on ls)', '5th on ls', 'CURRENT MH (5th on ls)', 'REMAINING MH (5th on ls)',
+                                'input shaft', 'CURRENT MH (input shaft)', 'REMAINING MH (input shaft)', 'main shaft', 'CURRENT MH (main shaft)', 'REMAINING MH (main shaft)',
+                                'lay shaft', 'CURRENT MH (lay shaft)', 'REMAINING MH (lay shaft)', 'hub 1/ 2', 'CURRENT MH (hub 1/ 2)', 'REMAINING MH (hub 1/ 2)',
+                                'hub 3/4', 'CURRENT MH (hub 3/4)', 'REMAINING MH (hub 3/4)', 'hub 5/6', 'CURRENT MH (hub 5/6)', 'REMAINING MH (hub 5/6)',
+                                'fdr', 'CURRENT MH (fdr)', 'REMAINING MH (fdr)', 'sleeve 1/ 2', 'CURRENT MH (sleeve 1/ 2)', 'REMAINING MH (sleeve 1/ 2)',
+                                'sleeve 3/4', 'CURRENT MH (sleeve 3/4)', 'REMAINING MH (sleeve 3/4)', 'sleeve 5/6', 'CURRENT MH (sleeve 5/6)', 'REMAINING MH (sleeve 5/6)',
+                                'cone 1/2', 'CURRENT MH (cone 1/2)', 'REMAINING MH (cone 1/2)', 'cone 3/4', 'CURRENT MH (cone 3/4)', 'REMAINING MH (cone 3/4)',
+                                'cone 5/6', 'CURRENT MH (cone 5/6)', 'REMAINING MH (cone 5/6)', 'cone 3', 'CURRENT MH (cone 3)', 'REMAINING MH (cone 3)', 'cone 4', 'CURRENT MH (cone 4)', 'REMAINING MH (cone 4)'
+                            ]
+
+                            # Reorder the columns based on the final_columns list
+                            filtered_2_wo_al = filtered_data[final_columns]
+
+                            # Display the final mapped data with the CURRENT MH and REMAINING MH columns
+                            st.write("Mapped Data from 'GB Requirement for Bal Month', 'Part Raw Data', and 'Made Here Parts Calc':")
+                            st.dataframe(filtered_2_wo_al)
+                            
+                            # Display the final DataFrame
+                         
+                            output = io.BytesIO()
+                            wb = Workbook()
+                            ws = wb.active
+                            ws.title = "Processed Data"
+
+                                # Write DataFrame to the worksheet
+                            for row in dataframe_to_rows(filtered_2_wo_al, index=False, header=True):
+                                ws.append(row)
+
+                                # Save the workbook to the BytesIO object
+                            wb.save(output)
+                            processed_file = output.getvalue()
+
+                            st.download_button(
+                                label="Download Processed Excel",
+                                data=processed_file,
+                                file_name="2_week_without_alternative.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        else:
+                            st.error('Columns "P.NO" or "CURRENT MH" not found in the "Made Here Parts Calc" sheet.')
+
+                else:
+                    st.error('Column "SPE" not found in one or both sheets.')
+
+            else:
+                if not matching_sheets_1:
+                    st.error('Sheet "GB Requirement for Bal Month" not found in the provided Excel file.')
+                if not matching_sheets_2:
+                    st.error('Sheet "Part Raw Data" not found in the provided Excel file.')
+                if not matching_sheets_3:
+                    st.error('Sheet "Made Here Parts Calc" not found in the provided Excel file.')
+
+        except Exception as e:
+            st.error(f"Error reading the Excel file: {e}")
 
 
+def four_week_with_alter():
+    st.title('4-week-with-alternative')
+
+# File uploader widget to upload the Excel file
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+
+    if uploaded_file is not None:
+        # Load the Excel file
+        try:
+            # Load all sheet names and match case-insensitively by converting them to lowercase
+            sheet_names = pd.ExcelFile(uploaded_file).sheet_names
+            
+            # Convert sheet names to lowercase for case-insensitive comparison
+            target_sheet_name_1 = "GB Requirement for Bal Month".lower()
+            target_sheet_name_2 = "Part Raw Data".lower()
+            target_sheet_name_3 = "Made Here Parts Calc".lower()
+            target_sheet_name_4 = "Alternate Part Master".lower()
+            
+            matching_sheets_1 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_1]
+            matching_sheets_2 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_2]
+            matching_sheets_3 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_3]
+            matching_sheets_4 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_4]
+            
+            if matching_sheets_1 and matching_sheets_2 and matching_sheets_3 and matching_sheets_4:
+                # Read the matched sheets
+                df_1 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_1[0])
+                df_2 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_2[0])
+                df_3 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_3[0])
+                df_4 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_4[0])
+
+                # Clean column names: remove leading/trailing spaces and make them case-insensitive
+                df_1.columns = df_1.columns.str.strip().str.lower()
+                df_2.columns = df_2.columns.str.strip().str.lower()
+                df_3.columns = df_3.columns.str.strip().str.lower()
+                df_4.columns = df_4.columns.str.strip().str.lower()
+
+                # Check if 'spe' column exists in both sheets
+                if 'spe' in df_1.columns and 'spe' in df_2.columns:
+                    # Merge the two dataframes based on 'spe'
+                    merged_data = pd.merge(df_1[['spe', 'w4 rev']], df_2, on='spe', how='inner')
+                    
+                    # List of the required columns from the Part Raw Data sheet
+                    required_columns = [
+                        '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                        'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                        'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                        'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                    ]
+
+                    # Check if all required columns are present
+                    missing_columns = [col for col in required_columns if col not in merged_data.columns]
+                    if missing_columns:
+                        st.error(f"Missing columns in Part Raw Data: {', '.join(missing_columns)}")
+                    else:
+                        # Select only the relevant columns and add Serial Number starting from 1
+                        filtered_data = merged_data[['spe', 'w4 rev'] + required_columns]
+                        
+                        # Replace None or NaN with 0 in the filtered data
+                        filtered_data = filtered_data.fillna(0)
+
+                        # Add Serial Number starting from 1
+                        filtered_data.insert(0, 'Serial Number', range(1, len(filtered_data) + 1))
+
+                        # --- New functionality for "Made Here Parts Calc" sheet ---
+
+                        # Extract P.NO and CURRENT MH columns from "Made Here Parts Calc"
+                        if 'p.no' in df_3.columns and 'current mh' in df_3.columns:
+                            made_here_parts_calc_df = df_3[['p.no', 'current mh']]
+
+                            # Track remaining stock using P.NO
+                            remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                            # Function to calculate CURRENT MH and REMAINING MH row-wise for each part and column
+                            def calculate_row_current_and_remaining(row, column):
+                                part_id = row[column]
+                                if part_id in remaining_stock:
+                                    available_mh = remaining_stock[part_id]
+                                    current_mh = min(row["w4 rev"], available_mh)  # Choose the min between W2 REV and available MH
+                                    remaining_stock[part_id] -= current_mh  # Update remaining stock
+                                    return current_mh
+                                return 0
+
+                            # Columns to process (the ones that start with 'F' like '1st on ms', '2nd on ms', etc.)
+                            columns_to_process = [
+                                '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                                'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                                'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                                'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                            ]
+
+                            # Calculate CURRENT MH and REMAINING MH for all components
+                            for col in columns_to_process:
+                                # Calculate CURRENT MH for each part (using the `calculate_row_current_and_remaining` function)
+                                filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                    lambda row: calculate_row_current_and_remaining(row, col), axis=1
+                                )
+
+                                # Calculate REMAINING MH as W2 REV - CURRENT MH
+                                filtered_data[f"REMAINING MH ({col})"] = (
+                                    filtered_data["w4 rev"] - filtered_data[f"CURRENT MH ({col})"]
+                                )
+
+                            # --- New functionality for "Alternate Part Master" sheet ---
+
+                            if 'p.no' in df_4.columns and 'sub1' in df_4.columns and 'sub2' in df_4.columns:
+                                alternate_part_master_df = df_4[['p.no', 'sub1', 'sub2']]
+
+                                # Step 3: Map P.NO to SUB1 and SUB2 for each column
+                                alternate_part_dict = alternate_part_master_df.set_index("p.no")[["sub1", "sub2"]].to_dict("index")
+
+                                for col in columns_to_process:
+                                    filtered_data[f"SUB1 ({col})"] = filtered_data[col].map(
+                                        lambda x: alternate_part_dict[x]["sub1"] if x in alternate_part_dict else 0
+                                    )
+                                    filtered_data[f"SUB2 ({col})"] = filtered_data[col].map(
+                                        lambda x: alternate_part_dict[x]["sub2"] if x in alternate_part_dict else 0
+                                    )
+
+                                # Step 4: Calculate CURRENT MH for each column
+                                remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                                def calculate_row_current(row, column):
+                                    key = row[column]
+                                    if key in remaining_stock:
+                                        available_mh = remaining_stock[key]
+                                        used_mh = min(row["w4 rev"], available_mh)
+                                        remaining_stock[key] -= used_mh
+                                        return used_mh
+                                    return 0
+
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                        lambda row: calculate_row_current(row, col), axis=1
+                                    )
+
+                                # Step 5: Calculate CURRENT MH for SUB1
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH (SUB1 {col})"] = filtered_data.apply(
+                                        lambda row: max(row["w4 rev"] - row[f"CURRENT MH ({col})"], 0), axis=1
+                                    )
+
+                                # Step 6: Calculate CURRENT MH for SUB2
+                                for col in columns_to_process:
+                                    filtered_data[f"CURRENT MH (SUB2 {col})"] = filtered_data.apply(
+                                        lambda row: max(row[f"CURRENT MH ({col})"] + row[f"CURRENT MH (SUB1 {col})"] - row["w4 rev"], 0), axis=1
+                                    )
+
+                            else:
+                                st.error('Columns "P.NO", "SUB1" or "SUB2" not found in the "Alternate Part Master" sheet.')
+
+                            # --- Step 7: Calculate the minimum CURRENT MH for each row, excluding zero-value columns ---
+                            def calculate_min_current_mh(row):
+                                non_zero_values = [
+                                    row[f"CURRENT MH ({col})"] for col in columns_to_process
+                                    if row[col] != 0
+                                ]
+                                return min(non_zero_values) if non_zero_values else 0
+
+                            filtered_data["MINIMUM CURRENT MH"] = filtered_data.apply(
+                                calculate_min_current_mh, axis=1
+                            )
+
+                            # Replace any remaining NaN or None values with 0
+                            filtered_data = filtered_data.fillna(0)
+
+                            # Re-arranging the columns as per the given order
+                            final_columns = [
+                                'spe', 'w4 rev', 'MINIMUM CURRENT MH', 
+                                '1st on ms', 'CURRENT MH (1st on ms)', 'SUB1 (1st on ms)', 'CURRENT MH (SUB1 1st on ms)', 'SUB2 (1st on ms)', 'CURRENT MH (SUB2 1st on ms)',
+                                '2nd on ms', 'CURRENT MH (2nd on ms)', 'SUB1 (2nd on ms)', 'CURRENT MH (SUB1 2nd on ms)', 'SUB2 (2nd on ms)', 'CURRENT MH (SUB2 2nd on ms)',
+                                '3rd on ms', 'CURRENT MH (3rd on ms)', 'SUB1 (3rd on ms)', 'CURRENT MH (SUB1 3rd on ms)', 'SUB2 (3rd on ms)', 'CURRENT MH (SUB2 3rd on ms)',
+                                '4th on ms', 'CURRENT MH (4th on ms)', 'SUB1 (4th on ms)', 'CURRENT MH (SUB1 4th on ms)', 'SUB2 (4th on ms)', 'CURRENT MH (SUB2 4th on ms)',
+                                '5th on ms', 'CURRENT MH (5th on ms)', 'SUB1 (5th on ms)', 'CURRENT MH (SUB1 5th on ms)', 'SUB2 (5th on ms)', 'CURRENT MH (SUB2 5th on ms)',
+                                'rev on ms', 'CURRENT MH (rev on ms)', 'SUB1 (rev on ms)', 'CURRENT MH (SUB1 rev on ms)', 'SUB2 (rev on ms)', 'CURRENT MH (SUB2 rev on ms)',
+                                'cm on ls', 'CURRENT MH (cm on ls)', 'SUB1 (cm on ls)', 'CURRENT MH (SUB1 cm on ls)', 'SUB2 (cm on ls)', 'CURRENT MH (SUB2 cm on ls)',
+                                'rev idler', 'CURRENT MH (rev idler)', 'SUB1 (rev idler)', 'CURRENT MH (SUB1 rev idler)', 'SUB2 (rev idler)', 'CURRENT MH (SUB2 rev idler)',
+                                '3rd on ls', 'CURRENT MH (3rd on ls)', 'SUB1 (3rd on ls)', 'CURRENT MH (SUB1 3rd on ls)', 'SUB2 (3rd on ls)', 'CURRENT MH (SUB2 3rd on ls)',
+                                '4th on ls', 'CURRENT MH (4th on ls)', 'SUB1 (4th on ls)', 'CURRENT MH (SUB1 4th on ls)', 'SUB2 (4th on ls)', 'CURRENT MH (SUB2 4th on ls)',
+                                '5th on ls', 'CURRENT MH (5th on ls)', 'SUB1 (5th on ls)', 'CURRENT MH (SUB1 5th on ls)', 'SUB2 (5th on ls)', 'CURRENT MH (SUB2 5th on ls)',
+                                'input shaft', 'CURRENT MH (input shaft)', 'SUB1 (input shaft)', 'CURRENT MH (SUB1 input shaft)', 'SUB2 (input shaft)', 'CURRENT MH (SUB2 input shaft)',
+                                'main shaft', 'CURRENT MH (main shaft)', 'SUB1 (main shaft)', 'CURRENT MH (SUB1 main shaft)', 'SUB2 (main shaft)', 'CURRENT MH (SUB2 main shaft)',
+                                'lay shaft', 'CURRENT MH (lay shaft)', 'SUB1 (lay shaft)', 'CURRENT MH (SUB1 lay shaft)', 'SUB2 (lay shaft)', 'CURRENT MH (SUB2 lay shaft)',
+                                'hub 1/ 2', 'CURRENT MH (hub 1/ 2)', 'SUB1 (hub 1/ 2)', 'CURRENT MH (SUB1 hub 1/ 2)', 'SUB2 (hub 1/ 2)', 'CURRENT MH (SUB2 hub 1/ 2)',
+                                'hub 3/4', 'CURRENT MH (hub 3/4)', 'SUB1 (hub 3/4)', 'CURRENT MH (SUB1 hub 3/4)', 'SUB2 (hub 3/4)', 'CURRENT MH (SUB2 hub 3/4)',
+                                'hub 5/6', 'CURRENT MH (hub 5/6)', 'SUB1 (hub 5/6)', 'CURRENT MH (SUB1 hub 5/6)', 'SUB2 (hub 5/6)', 'CURRENT MH (SUB2 hub 5/6)',
+                                'fdr', 'CURRENT MH (fdr)', 'SUB1 (fdr)', 'CURRENT MH (SUB1 fdr)', 'SUB2 (fdr)', 'CURRENT MH (SUB2 fdr)',
+                                'sleeve 1/ 2', 'CURRENT MH (sleeve 1/ 2)', 'SUB1 (sleeve 1/ 2)', 'CURRENT MH (SUB1 sleeve 1/ 2)', 'SUB2 (sleeve 1/ 2)', 'CURRENT MH (SUB2 sleeve 1/ 2)',
+                                'sleeve 3/4', 'CURRENT MH (sleeve 3/4)', 'SUB1 (sleeve 3/4)', 'CURRENT MH (SUB1 sleeve 3/4)', 'SUB2 (sleeve 3/4)', 'CURRENT MH (SUB2 sleeve 3/4)',
+                                'sleeve 5/6', 'CURRENT MH (sleeve 5/6)', 'SUB1 (sleeve 5/6)', 'CURRENT MH (SUB1 sleeve 5/6)', 'SUB2 (sleeve 5/6)', 'CURRENT MH (SUB2 sleeve 5/6)',
+                                'cone 1/2', 'CURRENT MH (cone 1/2)', 'SUB1 (cone 1/2)', 'CURRENT MH (SUB1 cone 1/2)', 'SUB2 (cone 1/2)', 'CURRENT MH (SUB2 cone 1/2)',
+                                'cone 3/4', 'CURRENT MH (cone 3/4)', 'SUB1 (cone 3/4)', 'CURRENT MH (SUB1 cone 3/4)', 'SUB2 (cone 3/4)', 'CURRENT MH (SUB2 cone 3/4)',
+                                'cone 5/6', 'CURRENT MH (cone 5/6)', 'SUB1 (cone 5/6)', 'CURRENT MH (SUB1 cone 5/6)', 'SUB2 (cone 5/6)', 'CURRENT MH (SUB2 cone 5/6)',
+                                'cone 3', 'CURRENT MH (cone 3)', 'SUB1 (cone 3)', 'CURRENT MH (SUB1 cone 3)', 'SUB2 (cone 3)', 'CURRENT MH (SUB2 cone 3)',
+                                'cone 4', 'CURRENT MH (cone 4)', 'SUB1 (cone 4)', 'CURRENT MH (SUB1 cone 4)', 'SUB2 (cone 4)', 'CURRENT MH (SUB2 cone 4)'
+                            ]
+
+                            # Reorder columns based on final_columns order
+                            filtered_4_w_a = filtered_data[final_columns]
+
+                            # Display the final DataFrame
+                            st.dataframe(filtered_4_w_a)
+                            output = io.BytesIO()
+                            wb = Workbook()
+                            ws = wb.active
+                            ws.title = "Processed Data"
+
+                                # Write DataFrame to the worksheet
+                            for row in dataframe_to_rows(filtered_4_w_a, index=False, header=True):
+                                ws.append(row)
+
+                                # Save the workbook to the BytesIO object
+                            wb.save(output)
+                            processed_file = output.getvalue()
+
+                            st.download_button(
+                                label="Download Processed Excel",
+                                data=processed_file,
+                                file_name="4_week_with_alternative.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                            
+                            
+
+                        else:
+                            st.error('Error: Missing "P.NO", "SUB1", or "SUB2" columns in the Alternate Part Master sheet.')
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+
+def four_week_without_alter():
+
+
+# Title of the app
+    st.title('4-week-without-alternative')
+
+    # File uploader widget to upload the Excel file
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+
+    if uploaded_file is not None:
+        # Load the Excel file
+        try:
+            # Load all sheet names and match case-insensitively by converting them to lowercase
+            sheet_names = pd.ExcelFile(uploaded_file).sheet_names
+
+            # Convert sheet names to lowercase for case-insensitive comparison
+            target_sheet_name_1 = "GB Requirement for Bal Month".lower()
+            target_sheet_name_2 = "Part Raw Data".lower()
+            target_sheet_name_3 = "Made Here Parts Calc".lower()
+
+            matching_sheets_1 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_1]
+            matching_sheets_2 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_2]
+            matching_sheets_3 = [sheet for sheet in sheet_names if sheet.lower() == target_sheet_name_3]
+
+            if matching_sheets_1 and matching_sheets_2 and matching_sheets_3:
+                # Read the matched sheets
+                df_1 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_1[0])
+                df_2 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_2[0])
+                df_3 = pd.read_excel(uploaded_file, sheet_name=matching_sheets_3[0])
+
+                # Clean column names: remove leading/trailing spaces and make them case-insensitive
+                df_1.columns = df_1.columns.str.strip().str.lower()
+                df_2.columns = df_2.columns.str.strip().str.lower()
+                df_3.columns = df_3.columns.str.strip().str.lower()
+
+                # Check if 'spe' column exists in both sheets
+                if 'spe' in df_1.columns and 'spe' in df_2.columns:
+                    # Merge the two dataframes based on 'spe'
+                    merged_data = pd.merge(df_1[['spe', 'w4 rev']], df_2, on='spe', how='inner')
+
+                    # List of the required columns from the Part Raw Data sheet
+                    required_columns = [
+                        '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                        'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                        'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                        'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                    ]
+
+                    # Check if all required columns are present
+                    missing_columns = [col for col in required_columns if col not in merged_data.columns]
+                    if missing_columns:
+                        st.error(f"Missing columns in Part Raw Data: {', '.join(missing_columns)}")
+                    else:
+                        # Select only the relevant columns and add Serial Number starting from 1
+                        filtered_data = merged_data[['spe', 'w4 rev'] + required_columns]
+
+                        # Replace None or NaN with 0 in the filtered data
+                        filtered_data = filtered_data.fillna(0)
+
+                        # Add Serial Number starting from 1
+                        filtered_data.insert(0, 'Serial Number', range(1, len(filtered_data) + 1))
+
+                        # --- New functionality for "Made Here Parts Calc" sheet ---
+
+                        # Extract P.NO and CURRENT MH columns from "Made Here Parts Calc"
+                        if 'p.no' in df_3.columns and 'current mh' in df_3.columns:
+                            made_here_parts_calc_df = df_3[['p.no', 'current mh']]
+
+                            # Track remaining stock using P.NO
+                            remaining_stock = made_here_parts_calc_df.set_index("p.no")["current mh"].to_dict()
+
+                            # Function to calculate CURRENT MH and REMAINING MH row-wise for each part and column
+                            def calculate_row_current_and_remaining(row, column):
+                                part_id = row[column]
+                                if part_id in remaining_stock:
+                                    available_mh = remaining_stock[part_id]
+                                    current_mh = min(row["w4 rev"], available_mh)  # Choose the min between W2 REV and available MH
+                                    remaining_stock[part_id] -= current_mh  # Update remaining stock
+                                    return current_mh
+                                return 0
+
+                            # Columns to process (the ones that start with 'F' like '1st on ms', '2nd on ms', etc.)
+                            columns_to_process = [
+                                '1st on ms', '2nd on ms', '3rd on ms', '4th on ms', '5th on ms', 'rev on ms',
+                                'cm on ls', 'rev idler', '3rd on ls', '4th on ls', '5th on ls', 'input shaft',
+                                'main shaft', 'lay shaft', 'hub 1/ 2', 'hub 3/4', 'hub 5/6', 'fdr', 'sleeve 1/ 2',
+                                'sleeve 3/4', 'sleeve 5/6', 'cone 1/2', 'cone 3/4', 'cone 5/6', 'cone 3', 'cone 4'
+                            ]
+
+                            # Calculate CURRENT MH and REMAINING MH for all components
+                            for col in columns_to_process:
+                                # Calculate CURRENT MH for each part (using the `calculate_row_current_and_remaining` function)
+                                filtered_data[f"CURRENT MH ({col})"] = filtered_data.apply(
+                                    lambda row: calculate_row_current_and_remaining(row, col), axis=1
+                                )
+
+                                # Calculate REMAINING MH as W2 REV - CURRENT MH
+                                filtered_data[f"REMAINING MH ({col})"] = (
+                                    filtered_data["w4 rev"] - filtered_data[f"CURRENT MH ({col})"]
+                                )
+
+                            # --- Step 4: Calculate the minimum CURRENT MH for each row ---
+                            def calculate_min_current_mh(row):
+                                non_zero_values = [
+                                    row[f"CURRENT MH ({col})"] for col in columns_to_process
+                                    if row[f"CURRENT MH ({col})"] != 0
+                                ]
+                                return min(non_zero_values) if non_zero_values else 0
+
+                            filtered_data["MINIMUM CURRENT MH"] = filtered_data.apply(
+                                calculate_min_current_mh, axis=1
+                            )
+
+                            # Re-arranging the columns as per the given order
+                            final_columns = [
+                                'spe', 'w4 rev','MINIMUM CURRENT MH','1st on ms', 'CURRENT MH (1st on ms)', 'REMAINING MH (1st on ms)',
+                                '2nd on ms', 'CURRENT MH (2nd on ms)', 'REMAINING MH (2nd on ms)', '3rd on ms', 'CURRENT MH (3rd on ms)', 'REMAINING MH (3rd on ms)',
+                                '4th on ms', 'CURRENT MH (4th on ms)', 'REMAINING MH (4th on ms)', '5th on ms', 'CURRENT MH (5th on ms)', 'REMAINING MH (5th on ms)',
+                                'rev on ms', 'CURRENT MH (rev on ms)', 'REMAINING MH (rev on ms)', 'cm on ls', 'CURRENT MH (cm on ls)', 'REMAINING MH (cm on ls)',
+                                'rev idler', 'CURRENT MH (rev idler)', 'REMAINING MH (rev idler)', '3rd on ls', 'CURRENT MH (3rd on ls)', 'REMAINING MH (3rd on ls)',
+                                '4th on ls', 'CURRENT MH (4th on ls)', 'REMAINING MH (4th on ls)', '5th on ls', 'CURRENT MH (5th on ls)', 'REMAINING MH (5th on ls)',
+                                'input shaft', 'CURRENT MH (input shaft)', 'REMAINING MH (input shaft)', 'main shaft', 'CURRENT MH (main shaft)', 'REMAINING MH (main shaft)',
+                                'lay shaft', 'CURRENT MH (lay shaft)', 'REMAINING MH (lay shaft)', 'hub 1/ 2', 'CURRENT MH (hub 1/ 2)', 'REMAINING MH (hub 1/ 2)',
+                                'hub 3/4', 'CURRENT MH (hub 3/4)', 'REMAINING MH (hub 3/4)', 'hub 5/6', 'CURRENT MH (hub 5/6)', 'REMAINING MH (hub 5/6)',
+                                'fdr', 'CURRENT MH (fdr)', 'REMAINING MH (fdr)', 'sleeve 1/ 2', 'CURRENT MH (sleeve 1/ 2)', 'REMAINING MH (sleeve 1/ 2)',
+                                'sleeve 3/4', 'CURRENT MH (sleeve 3/4)', 'REMAINING MH (sleeve 3/4)', 'sleeve 5/6', 'CURRENT MH (sleeve 5/6)', 'REMAINING MH (sleeve 5/6)',
+                                'cone 1/2', 'CURRENT MH (cone 1/2)', 'REMAINING MH (cone 1/2)', 'cone 3/4', 'CURRENT MH (cone 3/4)', 'REMAINING MH (cone 3/4)',
+                                'cone 5/6', 'CURRENT MH (cone 5/6)', 'REMAINING MH (cone 5/6)', 'cone 3', 'CURRENT MH (cone 3)', 'REMAINING MH (cone 3)', 'cone 4', 'CURRENT MH (cone 4)', 'REMAINING MH (cone 4)'
+                            ]
+
+                            # Reorder the columns based on the final_columns list
+                            filtered_4_wo_a= filtered_data[final_columns]
+
+                            # Display the final mapped data with the CURRENT MH and REMAINING MH columns
+                            st.write("Mapped Data from 'GB Requirement for Bal Month', 'Part Raw Data', and 'Made Here Parts Calc':")
+                            st.dataframe(filtered_4_wo_a)
+                            output = io.BytesIO()
+                            wb = Workbook()
+                            ws = wb.active
+                            ws.title = "Processed Data"
+
+                                # Write DataFrame to the worksheet
+                            for row in dataframe_to_rows(filtered_4_wo_a, index=False, header=True):
+                                ws.append(row)
+
+                                # Save the workbook to the BytesIO object
+                            wb.save(output)
+                            processed_file = output.getvalue()
+
+                            st.download_button(
+                                label="Download Processed Excel",
+                                data=processed_file,
+                                file_name="4_week_without_alternative.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                            
+                        else:
+                            st.error('Columns "P.NO" or "CURRENT MH" not found in the "Made Here Parts Calc" sheet.')
+
+                else:
+                    st.error('Column "SPE" not found in one or both sheets.')
+
+            else:
+                if not matching_sheets_1:
+                    st.error('Sheet "GB Requirement for Bal Month" not found in the provided Excel file.')
+                if not matching_sheets_2:
+                    st.error('Sheet "Part Raw Data" not found in the provided Excel file.')
+                if not matching_sheets_3:
+                    st.error('Sheet "Made Here Parts Calc" not found in the provided Excel file.')
+
+        except Exception as e:
+            st.error(f"Error reading the Excel file: {e}")
+
+
+        
 
 def Gbreq():
     st.title("GB Requirement For Bal Month")
@@ -137,20 +966,24 @@ def Gbreq():
     if uploaded_file:
         try:
             workbook = pd.ExcelFile(uploaded_file)
+            sheet_names = [name.lower() for name in workbook.sheet_names]
 
-            if "Monthly Opening Stock" not in workbook.sheet_names or "3 Month Plan" not in workbook.sheet_names:
+            if "monthly opening stock" not in sheet_names or "3 month plan" not in sheet_names:
                 st.error("Ensure the Excel file has sheets named 'Monthly Opening Stock' and '3 Month Plan'.")
             else:
-                os_sheet = pd.read_excel(workbook, sheet_name="Monthly Opening Stock")
-                plan_sheet = pd.read_excel(workbook, sheet_name="3 Month Plan")
+                os_sheet = pd.read_excel(workbook, sheet_name=[s for s in workbook.sheet_names if s.lower() == "monthly opening stock"][0])
+                plan_sheet = pd.read_excel(workbook, sheet_name=[s for s in workbook.sheet_names if s.lower() == "3 month plan"][0])
+                
+                os_sheet.columns = os_sheet.columns.str.lower()
+                plan_sheet.columns = plan_sheet.columns.str.lower()
 
                 # Extract months from headers
                 month_headers = list(
                     set(
                         [
-                            col.split(" W")[0]
+                            col.split(" w")[0]
                             for col in plan_sheet.columns
-                            if "W" in col
+                            if "w" in col
                         ]
                     )
                 )
@@ -163,13 +996,13 @@ def Gbreq():
                     results = []
 
                     for i, row in os_sheet.iterrows():
-                        gb_value = row.get("GB", 0)
-                        opening_stock = row.get("Opening Stock", 0)
+                        gb_value = row.get("gb", 0)
+                        opening_stock = row.get("opening stock", 0)
 
-                        w1_plan = plan_sheet.get(f"{selected_month} W1", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w2_plan = plan_sheet.get(f"{selected_month} W2", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w3_plan = plan_sheet.get(f"{selected_month} W3", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w4_plan = plan_sheet.get(f"{selected_month} W4", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
+                        w1_plan = plan_sheet.get(f"{selected_month} w1", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
+                        w2_plan = plan_sheet.get(f"{selected_month} w2", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
+                        w3_plan = plan_sheet.get(f"{selected_month} w3", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
+                        w4_plan = plan_sheet.get(f"{selected_month} w4", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
 
                         w1_rev = max(0, w1_plan - opening_stock)
                         w1_excess = w1_rev - w1_plan
@@ -207,6 +1040,7 @@ def Gbreq():
                         )
 
                     results_df_gb = pd.DataFrame(results)
+                    results_df_gb.fillna(0, inplace=True)
 
                     st.dataframe(results_df_gb, use_container_width=True)
 
@@ -215,11 +1049,11 @@ def Gbreq():
                     ws = wb.active
                     ws.title = "Processed Data"
 
-                        # Write DataFrame to the worksheet
+                    # Write DataFrame to the worksheet
                     for row in dataframe_to_rows(results_df_gb, index=False, header=True):
                         ws.append(row)
 
-                        # Save the workbook to the BytesIO object
+                    # Save the workbook to the BytesIO object
                     wb.save(output)
                     processed_file = output.getvalue()
 
@@ -232,67 +1066,75 @@ def Gbreq():
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
-def Month():
 
+def Month():
     st.title("Monthly GB Requirement After OS")
 
-# File upload
+    # File upload
     uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
 
     if uploaded_file:
         try:
             workbook = pd.ExcelFile(uploaded_file)
-
-            # Check for required sheets
-            if "3 Month Plan" not in workbook.sheet_names or "Monthly Opening Stock" not in workbook.sheet_names:
-                st.error("Ensure the Excel file has sheets named 'Monthly Opening Stock' and '3 Month Plan'.")
+            
+            # Convert sheet names to lowercase for case-insensitive comparison
+            sheet_names_lower = {sheet.lower(): sheet for sheet in workbook.sheet_names}
+            
+            required_sheets = ["3 month plan", "monthly opening stock"]
+            if not all(sheet in sheet_names_lower for sheet in required_sheets):
+                st.error("Ensure the Excel file has sheets named 'Monthly Opening Stock' and '3 Month Plan' (case insensitive).")
             else:
-                # Load sheets
-                plan_df = pd.read_excel(workbook, sheet_name="3 Month Plan")
-                os_df = pd.read_excel(workbook, sheet_name="Monthly Opening Stock")
-
-                # Extract unique months
+                # Load sheets with case-insensitive sheet names
+                plan_df = pd.read_excel(workbook, sheet_name=sheet_names_lower["3 month plan"], dtype=str)
+                os_df = pd.read_excel(workbook, sheet_name=sheet_names_lower["monthly opening stock"], dtype=str)
+                
+                # Convert column names to lowercase for case-insensitive comparison
+                plan_df.columns = map(str.lower, plan_df.columns)
+                os_df.columns = map(str.lower, os_df.columns)
+                
+                # Extract unique months (case-insensitive column headers)
                 month_headers = list(
                     {
-                        header.split(" W")[0].strip()
+                        header.split(" w")[0].strip()
                         for header in plan_df.columns
-                        if "W" in header
+                        if " w" in header
                     }
                 )
-
+                
                 selected_month = st.selectbox("Select Month", month_headers)
-
+                
                 if selected_month:
                     st.subheader(f"Results for {selected_month}")
                     processed_data = []
-
+                    
                     for _, row in os_df.iterrows():
-                        gb_value = row.get("GB", 0)
-                        opening_stock = row.get("Opening Stock", 0)
+                        gb_value = row.get("gb", 0)
+                        opening_stock = row.get("opening stock", 0)
                         remaining_stock = opening_stock
-
+                        
                         row_result = {"GB": gb_value, "Opening Stock": opening_stock}
-
-                        for week in ["W1", "W2", "W3", "W4"]:
+                        
+                        for week in ["w1", "w2", "w3", "w4"]:
                             header = f"{selected_month} {week}"
                             if header in plan_df.columns:
                                 week_plan = plan_df.loc[_, header] if _ < len(plan_df) else 0
                                 fulfilled_plan = min(week_plan, remaining_stock)
                                 unmet_plan = week_plan - fulfilled_plan
                                 remaining_stock -= fulfilled_plan
-
+                                
                                 row_result[header] = week_plan
                                 row_result[f"Plan for {week}"] = unmet_plan
-
+                        
                         processed_data.append(row_result)
-
+                        
                     # Rearrange columns
                     column_order = [
                         "GB", "Opening Stock",
-                        f"{selected_month} W1", f"{selected_month} W2", f"{selected_month} W3", f"{selected_month} W4",
-                        "Plan for W1", "Plan for W2", "Plan for W3", "Plan for W4"
+                        f"{selected_month} w1", f"{selected_month} w2", f"{selected_month} w3", f"{selected_month} w4",
+                        "Plan for w1", "Plan for w2", "Plan for w3", "Plan for w4"
                     ]
                     results_df = pd.DataFrame(processed_data)[column_order]
+                    results_df.fillna(0, inplace=True)
 
                     st.write("### Calculated Results")
                     st.dataframe(results_df, use_container_width=True)
@@ -303,176 +1145,8 @@ def Month():
                     ws = wb.active
                     ws.title = "Processed Data"
 
-                        # Write DataFrame to the worksheet
-                    for row in dataframe_to_rows(results_df, index=False, header=True):
-                        ws.append(row)
-
-                        # Save the workbook to the BytesIO object
-                    wb.save(output)
-                    processed_file = output.getvalue()
-
-                    st.download_button(
-                        label="Download Processed Excel",
-                        data=processed_file,
-                        file_name="Month GB Requirement After OS.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
-                
-def map_wout_alt():
-    # Title for the Streamlit app
-    st.title("Matched set avilable with out consider alternates ")
-
-    # File uploader for user to upload an Excel file
-    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"],key="mapset")
-
-    if uploaded_file:
-        try:
-            # Load the Excel file
-            data = pd.ExcelFile(uploaded_file)
-
-            # Check for required sheets
-            required_sheets = [
-                "Today's Tentative Plan", "Part Raw Data", "Nomenclature Master", "Made Here Parts Calc"
-            ]
-
-            # Validate sheet names
-            if not all(sheet in data.sheet_names for sheet in required_sheets):
-                missing_sheets = [sheet for sheet in required_sheets if sheet not in data.sheet_names]
-                st.error(f"Missing sheets: {', '.join(missing_sheets)}")
-            else:
-                # Load sheets
-                tentative_plan_df = data.parse("Today's Tentative Plan")
-                nomenclature_master_df = data.parse("Nomenclature Master")
-                part_raw_data_df = data.parse("Part Raw Data")
-                made_here_parts_calc_df = data.parse("Made Here Parts Calc")
-
-                # Standardize column names
-                tentative_plan_df.columns = tentative_plan_df.columns.str.strip().str.upper()
-                nomenclature_master_df.columns = nomenclature_master_df.columns.str.strip().str.upper()
-                part_raw_data_df.columns = part_raw_data_df.columns.str.strip().str.upper()
-                made_here_parts_calc_df.columns = made_here_parts_calc_df.columns.str.strip().str.upper()
-
-                # Ensure required columns exist
-                required_columns = {
-                    "Today's Tentative Plan": ["MODEL", "QTY"],
-                    "Nomenclature Master": ["MODEL", "SPE"],
-                    "Part Raw Data": [
-                        "SPE", "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
-                        "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
-                        "HUB 1/ 2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/ 2", "SLEEVE 3/4", "SLEEVE 5/6",
-                        "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
-                    ],
-                    "Made Here Parts Calc": ["P.NO", "CURRENT MH"]
-                }
-
-                missing_columns = []
-                for sheet_name, cols in required_columns.items():
-                    df = {
-                        "Today's Tentative Plan": tentative_plan_df,
-                        "Nomenclature Master": nomenclature_master_df,
-                        "Part Raw Data": part_raw_data_df,
-                        "Made Here Parts Calc": made_here_parts_calc_df
-                    }[sheet_name]
-
-                    for col in cols:
-                        if col not in df.columns:
-                            missing_columns.append(f"{col} in {sheet_name}")
-
-                if missing_columns:
-                    st.error(f"Missing columns: {', '.join(missing_columns)}")
-                else:
-                    # Step 1: Map MODEL to SPE
-                    tentative_plan_df = tentative_plan_df.merge(
-                        nomenclature_master_df[["MODEL", "SPE"]], on="MODEL", how="left"
-                    )
-
-                    # Step 2: Map SPE to columns
-                    columns_to_process = [
-                        "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
-                        "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
-                        "HUB 1/ 2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/ 2", "SLEEVE 3/4", "SLEEVE 5/6",
-                        "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
-                    ]
-
-                    tentative_plan_df = tentative_plan_df.merge(
-                        part_raw_data_df[["SPE"] + columns_to_process], on="SPE", how="left"
-                    )
-
-                    # Replace None or NaN values with 0
-                    tentative_plan_df.fillna(0, inplace=True)
-
-                    # Step 3: Calculate CURRENT MH and REMAINING MH row-wise for each column
-                    remaining_stock = made_here_parts_calc_df.set_index("P.NO")["CURRENT MH"].to_dict()
-
-                    def calculate_row_remaining(row, column):
-                        key = row[column]
-                        if key in remaining_stock:
-                            available_mh = remaining_stock[key]
-                            used_mh = min(row["QTY"], available_mh)
-                            remaining_stock[key] -= used_mh
-                            return used_mh
-                        return 0
-
-                    for col in columns_to_process:
-                        tentative_plan_df[f"CURRENT MH ({col})"] = tentative_plan_df.apply(
-                            lambda row: calculate_row_remaining(row, col), axis=1
-                        )
-
-                        tentative_plan_df[f"REMAINING MH ({col})"] = (
-                            tentative_plan_df["QTY"] - tentative_plan_df[f"CURRENT MH ({col})"].fillna(0)
-                        ).clip(lower=0)
-
-                    # Step 4: Calculate the minimum CURRENT MH for each row, excluding zero-value columns
-                    def calculate_min_current_mh(row):
-                        non_zero_values = [
-                            row[f"CURRENT MH ({col})"] for col in columns_to_process
-                            if row[col] != 0
-                        ]
-                        return min(non_zero_values) if non_zero_values else 0
-
-                    tentative_plan_df["MINIMUM CURRENT MH"] = tentative_plan_df.apply(
-                        calculate_min_current_mh, axis=1
-                    )
-
-                    # Step 5: Select final columns for output
-                    final_columns = [
-                        "MODEL", "SPE", "QTY", "MINIMUM CURRENT MH"
-                    ]
-
-                    for col in columns_to_process:
-                        final_columns.extend([
-                            col, f"CURRENT MH ({col})", f"REMAINING MH ({col})"
-                        ])
-
-                    final_df = tentative_plan_df[final_columns]
-
-                    # Add serial numbers starting from 1
-                    final_df.reset_index(inplace=True, drop=True)
-                    final_df.index = final_df.index + 1
-                    final_df.index.name = "Serial Number"
-
-                    # Step 6: Add a Total Row for MINIMUM CURRENT MH only
-                    total_row = {col: "" for col in final_df.columns}  # Initialize with empty strings
-                    total_row["MODEL"] = "TOTAL"  # Add label in the MODEL column
-                    total_row["MINIMUM CURRENT MH"] = final_df["MINIMUM CURRENT MH"].sum()  # Sum for MINIMUM CURRENT MH
-
-                    # Append the total row to the DataFrame
-                    final_df_wo = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
-
-                    # Display the final DataFrame
-                    st.write("### Processed Data (Detailed):")
-                    st.dataframe(final_df_wo)
-                    # Option to download the processed file using openpyxl
-                    output = io.BytesIO()
-                    wb = Workbook()
-                    ws = wb.active
-                    ws.title = "Processed Data"
-
                     # Write DataFrame to the worksheet
-                    for row in dataframe_to_rows(final_df_wo, index=False, header=True):
+                    for row in dataframe_to_rows(results_df, index=False, header=True):
                         ws.append(row)
 
                     # Save the workbook to the BytesIO object
@@ -482,18 +1156,168 @@ def map_wout_alt():
                     st.download_button(
                         label="Download Processed Excel",
                         data=processed_file,
-                        file_name="Without Alternate.xlsx",
+                        file_name="Month_GB_Requirement_After_OS.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
+    
+def map_wout_alt():
+    # Title for the Streamlit app
+    st.title("Matched Set Available Without Considering Alternates")
+
+    # File uploader for user to upload an Excel file
+    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"], key='filee')
+
+    if uploaded_file:
+        try:
+            # Load the Excel file
+            data = pd.ExcelFile(uploaded_file)
+
+            # Normalize sheet names for case-insensitive matching
+            sheet_names = {sheet.lower(): sheet for sheet in data.sheet_names}
+            required_sheets = [
+                "today's tentative plan", "part raw data", "nomenclature master", "made here parts calc"
+            ]
+
+            # Check for required sheets
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in sheet_names]
+            if missing_sheets:
+                st.error(f"Missing sheets: {', '.join(missing_sheets)}")
+                return
+
+            # Load sheets using case-insensitive names
+            tentative_plan_df = data.parse(sheet_names["today's tentative plan"])
+            nomenclature_master_df = data.parse(sheet_names["nomenclature master"])
+            part_raw_data_df = data.parse(sheet_names["part raw data"])
+            made_here_parts_calc_df = data.parse(sheet_names["made here parts calc"])
+
+            # Standardize column names (strip spaces and convert to uppercase)
+            for df in [tentative_plan_df, nomenclature_master_df, part_raw_data_df, made_here_parts_calc_df]:
+                df.columns = df.columns.str.strip().str.upper()
+
+            # Required columns
+            required_columns = {
+                "TODAY'S TENTATIVE PLAN": ["MODEL", "QTY"],
+                "NOMENCLATURE MASTER": ["MODEL", "SPE"],
+                "PART RAW DATA": [
+                    "SPE", "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
+                    "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
+                    "HUB 1/2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/2", "SLEEVE 3/4", "SLEEVE 5/6",
+                    "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
+                ],
+                "MADE HERE PARTS CALC": ["P.NO", "CURRENT MH"]
+            }
+
+            # Check for missing columns
+            missing_columns = []
+            for sheet_name, cols in required_columns.items():
+                df = {
+                    "TODAY'S TENTATIVE PLAN": tentative_plan_df,
+                    "NOMENCLATURE MASTER": nomenclature_master_df,
+                    "PART RAW DATA": part_raw_data_df,
+                    "MADE HERE PARTS CALC": made_here_parts_calc_df
+                }[sheet_name]
+
+                df_columns = set(df.columns)
+                for col in cols:
+                    if col not in df_columns:
+                        missing_columns.append(f"{col} in {sheet_name}")
+
+            if missing_columns:
+                st.error(f"Missing columns: {', '.join(missing_columns)}")
+                return
+
+            # Step 1: Map MODEL to SPE
+            tentative_plan_df = tentative_plan_df.merge(
+                nomenclature_master_df[["MODEL", "SPE"]], on="MODEL", how="left"
+            )
+
+            # Step 2: Map SPE to columns
+            columns_to_process = required_columns["PART RAW DATA"][1:]  # Exclude "SPE"
+            tentative_plan_df = tentative_plan_df.merge(
+                part_raw_data_df[["SPE"] + columns_to_process], on="SPE", how="left"
+            )
+
+            # Replace NaN values with 0
+            tentative_plan_df.fillna(0, inplace=True)
+
+            # Step 3: Calculate CURRENT MH and REMAINING MH
+            remaining_stock = made_here_parts_calc_df.set_index("P.NO")["CURRENT MH"].to_dict()
+
+            def calculate_row_remaining(row, column):
+                key = row[column]
+                if key in remaining_stock:
+                    available_mh = remaining_stock[key]
+                    used_mh = min(row["QTY"], available_mh)
+                    remaining_stock[key] -= used_mh
+                    return used_mh
+                return 0
+
+            for col in columns_to_process:
+                tentative_plan_df[f"CURRENT MH ({col})"] = tentative_plan_df.apply(
+                    lambda row: calculate_row_remaining(row, col), axis=1
+                )
+                tentative_plan_df[f"REMAINING MH ({col})"] = (
+                    tentative_plan_df["QTY"] - tentative_plan_df[f"CURRENT MH ({col})"].fillna(0)
+                ).clip(lower=0)
+
+            # Step 4: Calculate the minimum CURRENT MH for each row
+            def calculate_min_current_mh(row):
+                non_zero_values = [
+                    row[f"CURRENT MH ({col})"] for col in columns_to_process if row[col] != 0
+                ]
+                return min(non_zero_values) if non_zero_values else 0
+
+            tentative_plan_df["MINIMUM CURRENT MH"] = tentative_plan_df.apply(
+                calculate_min_current_mh, axis=1
+            )
+
+            # Step 5: Prepare final output
+            final_columns = ["MODEL", "SPE", "QTY", "MINIMUM CURRENT MH"]
+            for col in columns_to_process:
+                final_columns.extend([col, f"CURRENT MH ({col})", f"REMAINING MH ({col})"])
+
+            final_df = tentative_plan_df[final_columns]
+            final_df.reset_index(inplace=True, drop=True)
+            final_df.index += 1  # Add serial numbers
+            final_df.index.name = "Serial Number"
+
+            # Add Total Row
+            total_row = {col: "" for col in final_df.columns}
+            total_row["MODEL"] = "TOTAL"
+            total_row["MINIMUM CURRENT MH"] = final_df["MINIMUM CURRENT MH"].sum()
+            final_df_wo = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
+
+            # Display the final DataFrame
+            st.write("### Processed Data (Detailed):")
+            st.dataframe(final_df_wo)
+
+            # Download processed file
+            output = io.BytesIO()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Processed Data"
+            for row in dataframe_to_rows(final_df_wo, index=False, header=True):
+                ws.append(row)
+            wb.save(output)
+            processed_file = output.getvalue()
+
+            st.download_button(
+                label="Download Processed Excel",
+                data=processed_file,
+                file_name="Without_Alternate.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
     else:
         st.info("Please upload an Excel file to get started.")
+ 
+ 
         
-    
 def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
-    
     st.title("Priority Analysis - P.NO with WIP, Description, and SUB1 Mapping")
 
     # File uploader
@@ -507,44 +1331,43 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
             # Convert sheet names to uppercase for case-insensitive matching
             sheet_names_upper = {sheet_name.upper(): sheet_name for sheet_name in excel_data.sheet_names}
 
-            # Check if 'Priority format' sheet exists
-            if 'PRIORITY FORMAT' in sheet_names_upper:
-                priority_df = excel_data.parse(sheet_names_upper['PRIORITY FORMAT'])
-                priority_df.columns = priority_df.columns.str.strip().str.upper()
+            def read_sheet(sheet_key):
+                """Reads a sheet and makes column names uppercase for case-insensitive matching."""
+                df = excel_data.parse(sheet_names_upper[sheet_key])
+                df.columns = df.columns.str.strip().str.upper()
+                return df
 
+            # Check if 'Priority format' sheet exists
+            part_no_column = None
+            if 'PRIORITY FORMAT' in sheet_names_upper:
+                priority_df = read_sheet('PRIORITY FORMAT')
                 if 'P.NO' in priority_df.columns:
                     part_no_column = priority_df[['P.NO']].drop_duplicates().reset_index(drop=True)
                     part_no_column.index += 1  # Set serial numbers starting from 1
                     part_no_column.index.name = "Serial Number"
                 else:
                     st.error("The 'P.NO' column was not found in the 'Priority format' sheet.")
-                    part_no_column = None
             else:
                 st.error("The 'Priority format' sheet was not found in the uploaded Excel file.")
-                part_no_column = None
 
             # Check if 'Made Here Parts Calc' sheet exists
+            wip_data = None
             if 'MADE HERE PARTS CALC' in sheet_names_upper:
-                made_here_df = excel_data.parse(sheet_names_upper['MADE HERE PARTS CALC'])
-                made_here_df.columns = made_here_df.columns.str.strip().str.upper()
-
-                required_columns = ['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT', 'DESC']
+                made_here_df = read_sheet('MADE HERE PARTS CALC')
+                required_columns = ['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP', 'WFT', 'DESC']
                 missing_columns = [col for col in required_columns if col not in made_here_df.columns]
 
                 if not missing_columns:
                     wip_data = made_here_df[required_columns].fillna(0)
                 else:
                     st.error(f"Missing columns in 'Made Here Parts Calc': {', '.join(missing_columns)}")
-                    wip_data = None
             else:
                 st.error("The 'Made Here Parts Calc' sheet was not found.")
-                wip_data = None
 
             # Check if 'Alternate Part Master' sheet exists
+            sub1_data = None
             if 'ALTERNATE PART MASTER' in sheet_names_upper:
-                alternate_part_master_df = excel_data.parse(sheet_names_upper['ALTERNATE PART MASTER'])
-                alternate_part_master_df.columns = alternate_part_master_df.columns.str.strip().str.upper()
-
+                alternate_part_master_df = read_sheet('ALTERNATE PART MASTER')
                 required_sub1_columns = ['P.NO', 'SUB1']
                 missing_sub1_columns = [col for col in required_sub1_columns if col not in alternate_part_master_df.columns]
 
@@ -552,10 +1375,8 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
                     sub1_data = alternate_part_master_df[['P.NO', 'SUB1']].drop_duplicates().reset_index(drop=True)
                 else:
                     st.error(f"Missing columns in 'Alternate Part Master': {', '.join(missing_sub1_columns)}")
-                    sub1_data = None
             else:
                 st.error("The 'Alternate Part Master' sheet was not found.")
-                sub1_data = None
 
             # Mapping Data
             if part_no_column is not None and wip_data is not None and sub1_data is not None:
@@ -563,27 +1384,22 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
                 mapped_data = mapped_data.merge(sub1_data, on='P.NO', how='left')
                 mapped_data.fillna(0, inplace=True)
 
-                sub1_wip_data = made_here_df[['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT']]
-                sub1_wip_data.columns = ['SUB1', 'HARD WIP (2)', 'HT WIP (2)', 'SOFT WIP (2)', 'ROUGH WIP (2)','WFT (2)']
+                sub1_wip_data = made_here_df[['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP', 'WFT']]
+                sub1_wip_data.columns = ['SUB1', 'HARD WIP (2)', 'HT WIP (2)', 'SOFT WIP (2)', 'ROUGH WIP (2)', 'WFT (2)']
                 mapped_data = mapped_data.merge(sub1_wip_data, on='SUB1', how='left').fillna(0)
 
                 # Load Cycle Time Sheet if exists
+                cycle_time_mapping = {}
                 if 'CYCLE TIME SHEET' in sheet_names_upper:
-                    cycle_time_df = excel_data.parse(sheet_names_upper['CYCLE TIME SHEET'])
-                    cycle_time_df.columns = cycle_time_df.columns.str.strip().str.upper()
-
+                    cycle_time_df = read_sheet('CYCLE TIME SHEET')
                     if {'P.NO', 'CYCLE TIME'}.issubset(cycle_time_df.columns):
                         cycle_time_mapping = cycle_time_df.set_index('P.NO')['CYCLE TIME'].to_dict()
-                    else:
-                        cycle_time_mapping = {}
-                else:
-                    cycle_time_mapping = {}
 
                 # Calculate 1st Priority
                 def calculate_1st_priority(row):
                     cycle_time = cycle_time_mapping.get(row['SUB1'], None)
                     if cycle_time is not None:
-                        if cycle_time < row['WFT'] or cycle_time == row['WFT']:
+                        if cycle_time <= row['WFT']:
                             return "Hard-TG"
                     if row['WFT'] > 100:
                         return "Hard-TG"
@@ -604,368 +1420,282 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
                     return "Rough"
 
                 mapped_data['2nd Priority'] = mapped_data.apply(calculate_2nd_priority, axis=1)
-                
-                # Combine 1st & 2nd Priority
                 mapped_data['1st&2nd Priority'] = mapped_data['1st Priority'] + " & " + mapped_data['2nd Priority']
-
-                final_columns = ['P.NO', 'HARD WIP', 'HT WIP', 'SOFT WIP', 'ROUGH WIP','WFT', 'DESC', 'SUB1', 
-                                'HARD WIP (2)', 'HT WIP (2)', 'SOFT WIP (2)', 'ROUGH WIP (2)','WFT (2)',
-                                '1st Priority', '2nd Priority', '1st&2nd Priority']
-
-                mapped_data = mapped_data[final_columns]
-                mapped_data.reset_index(inplace=True, drop=True)
-                mapped_data.index += 1
-                mapped_data.index.name = "Serial Number"
 
                 st.subheader("Mapped Data: P.NO with WIP, Description, and SUB1 Columns")
                 st.write(mapped_data)
 
-        except Exception as e:
-            st.error(f"An error occurred while processing the file: {e}")
-        output = io.BytesIO()
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Processed Data"
-
-                # Write DataFrame to the worksheet
-        for row in dataframe_to_rows(mapped_data, index=False, header=True):
-            ws.append(row)
-
-                # Save the workbook to the BytesIO object
-        wb.save(output)
-        processed_file = output.getvalue()
-
-        st.download_button(
-                    label="Download Priority sheet Excel",
-                    data=processed_file,
-                    file_name="Priority sheet.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
-    else:
-        st.info("Please upload an Excel file to proceed.")
-def process_part_matrix_master():
-    st.title("made here part calculation")
-    st.write("UEpload an Excel file, and we'll process the 'Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here' sheets for you.")
-
-    # File uploader
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
-
-    if uploaded_file:
-        # try:
-            # Load the Excel file
-            excel_data = pd.ExcelFile(uploaded_file)
-
-            # Check if necessary sheets exist
-            required_sheets = ['Part Matrix Master', 'GB Requirement for Bal Month', 'Date wise made here']
-            if all(sheet in excel_data.sheet_names for sheet in required_sheets):
-                # Read the necessary sheets
-                part_matrix_df = pd.read_excel(excel_data, sheet_name='Part Matrix Master')
-                gb_requirement_df = pd.read_excel(excel_data, sheet_name='GB Requirement for Bal Month')
-                date_wise_df = pd.read_excel(excel_data, sheet_name='Date wise made here')
-
-                # Fill empty values with 0
-                part_matrix_df.fillna(0, inplace=True)
-                gb_requirement_df.fillna(0, inplace=True)
-                date_wise_df.fillna(0, inplace=True)
-
-                # Ensure the 'W1 Rev', 'W2 Rev', 'W3 Rev', and 'W4 Rev' columns exist
-                required_columns = ['W1 Rev', 'W2 Rev', 'W3 Rev', 'W4 Rev']
-                for col in required_columns:
-                    if col not in gb_requirement_df.columns:
-                        st.error(f"'{col}' column not found in 'GB Requirement for Bal Month' sheet.")
-                        return
-
-                # Create mappings from GB Requirement sheet
-                gb_mappings = {
-                    'W1': gb_requirement_df.set_index(gb_requirement_df.columns[0])['W1 Rev'].to_dict(),
-                    'W2': gb_requirement_df.set_index(gb_requirement_df.columns[0])['W2 Rev'].to_dict(),
-                    'W3': gb_requirement_df.set_index(gb_requirement_df.columns[0])['W3 Rev'].to_dict(),
-                    'W4': gb_requirement_df.set_index(gb_requirement_df.columns[0])['W4 Rev'].to_dict(),
-                }
-
-                # Duplicate columns and compute for W1, W2, W3, and W4
-                duplicate_columns = [
-                    "A1577000", "A5P35700", "A1580300", "A5P41600", "A5P15900", "A5P43400", "A5P36500", "A5P46200",
-                    "A5P64100", "A5P56000", "A5P25000", "A5P41800", "A5P27700", "A5P53200", "A5P50700", "A5P07100",
-                    "A5P71000", "A5P71300", "A5P75900", "A5P73600", "A5P41400", "A5P58800", "A5P66600", "A5P50100",
-                    "A5P47800", "A5P76200", "A1571600", "A5P56700", "A5P72100", "A5P74000", "A5P72300", "MM22000090",
-                    "MM22000091", "MM22000111", "MM22000092", "MM22000114", "MM22000130", "MM22000136", "MM22000228",
-                    "MM22000163", "MM22000165", "MM22000181", "MM22000170", "MM22000179", "MM22000150", "MM22000172",
-                    "MM22000214", "MM22000239", "MM22000353", "MM22000216", "MM22000233", "MM22000235", "MM22000191",
-                    "MM22000241", "MM22000253", "MM22000256", "MM22000259", "MM22000260", "MM22000261", "MM22000284",
-                    "MM22000287", "MM22000288", "MM22000289", "MM22000290", "MM22000294", "MM22000307", "A5P45600",
-                    "GB105/32", "A5P51000", "A5P36200", "A5P50200", "A5P72900"
-                ]
-
-                for week, mapping in gb_mappings.items():
-                    for col in duplicate_columns:
-                        if col in part_matrix_df.columns:
-                            # Replace negative values in Part Matrix Master with 0
-                            part_matrix_df[col] = part_matrix_df[col].apply(lambda x: max(x, 0))
-
-                            # Create duplicate column and apply mapping
-                            new_col_name = f"{col}_{week.lower()}"
-                            part_matrix_df[new_col_name] = part_matrix_df[col] * mapping.get(col, 1)
-                            part_matrix_df[new_col_name] = part_matrix_df[new_col_name].apply(lambda x: max(x, 0))
-
-                # Calculate W1, W2, W3, and W4 as the sum of respective columns
-                for week in gb_mappings.keys():
-                    week_cols = [f"{col}_{week.lower()}" for col in duplicate_columns if f"{col}_{week.lower()}" in part_matrix_df.columns]
-                    part_matrix_df[week] = part_matrix_df[week_cols].sum(axis=1)
-
-                # Process unique dates from 'Date wise made here'
-                if 'Date' in date_wise_df.columns:
-                    unique_dates = date_wise_df['Date'].drop_duplicates().sort_values()
-
-                    selected_date = st.selectbox("Select a Date", unique_dates)
-                    st.write(f"You selected: {selected_date}")
-
-                    # Filter rows based on the selected date
-                    filtered_date_wise_df = date_wise_df[date_wise_df['Date'] == selected_date]
-
-                    # Add the required columns to 'Part Matrix Master'
-                    if {'Current MH', 'Hard WIP', 'HT WIP', 'Soft WIP', 'Rough WIP','Hard Wating For teeth'}.issubset(filtered_date_wise_df.columns):
-                        part_matrix_df['Current MH'] = filtered_date_wise_df['Current MH'].values
-                        part_matrix_df['Hard WIP'] = filtered_date_wise_df['Hard WIP'].values
-                        part_matrix_df['HT WIP'] = filtered_date_wise_df['HT WIP'].values
-                        part_matrix_df['Soft WIP'] = filtered_date_wise_df['Soft WIP'].values
-                        part_matrix_df['Rough WIP'] = filtered_date_wise_df['Rough WIP'].values
-                        part_matrix_df['Hard Wating For teeth'] = filtered_date_wise_df['Hard Wating For teeth'].values
-
-                        # Rename 'Current MH' to 'Store Finished'
-                        part_matrix_df.rename(columns={'Hard Wating For teeth': 'WFT'}, inplace=True)
-                        part_matrix_df.rename(columns={'Current MH': 'Store Finished'}, inplace=True)
-                    else:
-                        st.warning("Some required columns are missing in 'Date wise made here'.")
-                else:
-                    st.error("'Date' column not found in 'Date wise made here' sheet.")
-
-                # Display the processed DataFrame
-                st.subheader("Processed 'Part Matrix Master' Sheet")
-                st.dataframe(part_matrix_df)
-
-                # Option to download the processed file using openpyxl
+                # Save to Excel
                 output = io.BytesIO()
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "Processed Data"
-
-                # Write DataFrame to the worksheet
-                for row in dataframe_to_rows(part_matrix_df, index=False, header=True):
+                for row in dataframe_to_rows(mapped_data, index=False, header=True):
                     ws.append(row)
-
-                # Save the workbook to the BytesIO object
                 wb.save(output)
                 processed_file = output.getvalue()
 
                 st.download_button(
-                    label="Download Processed Excel",
+                    label="Download Priority sheet Excel",
                     data=processed_file,
-                    file_name="processed_part_matrix_master.xlsx",
+                    file_name="Priority_sheet.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
-            else:
-                st.error("The required sheets ('Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here') were not found in the uploaded file.")
+        except Exception as e:
+            st.error(f"An error occurred while processing the file: {e}")
+    else:
+        st.info("Please upload an Excel file to proceed.")
 
-        # except Exception as e:
-        #     st.error(f"An error occurred: {e}")
+
+def process_part_matrix_master():
+    st.title("Made Here Part Calculation")
+    st.write("Upload an Excel file, and we'll process the 'Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here' sheets for you.")
+
+    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
+
+    if uploaded_file:
+        try:
+            excel_data = pd.ExcelFile(uploaded_file)
+
+            # Convert sheet names to lowercase for case-insensitive matching
+            available_sheets = {sheet.lower(): sheet for sheet in excel_data.sheet_names}
+            required_sheets = ['part matrix master', 'gb requirement for bal month', 'date wise made here']
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in available_sheets]
+
+            if missing_sheets:
+                st.error(f"Missing sheets in uploaded file: {', '.join(missing_sheets)}")
+                return
+
+            # Load dataframes using original sheet names from the uploaded file
+            part_matrix_df = pd.read_excel(excel_data, sheet_name=available_sheets['part matrix master'])
+            gb_requirement_df = pd.read_excel(excel_data, sheet_name=available_sheets['gb requirement for bal month'])
+            date_wise_df = pd.read_excel(excel_data, sheet_name=available_sheets['date wise made here'])
+
+            # Normalize column names to lowercase for case-insensitive processing
+            part_matrix_df.columns = part_matrix_df.columns.str.lower()
+            gb_requirement_df.columns = gb_requirement_df.columns.str.lower()
+            date_wise_df.columns = date_wise_df.columns.str.lower()
+
+            part_matrix_df.fillna(0, inplace=True)
+            gb_requirement_df.fillna(0, inplace=True)
+
+            # Handle 'Date wise made here' processing
+            if 'date' not in date_wise_df.columns:
+                st.error("'Date' column not found in 'Date wise made here' sheet.")
+                return
+
+            # Convert 'Date' to datetime and drop invalid rows
+            date_wise_df['date'] = pd.to_datetime(date_wise_df['date'], errors='coerce')
+            date_wise_df = date_wise_df.dropna(subset=['date'])
+
+            # Fill NaN in other columns with 0, excluding 'Date'
+            other_columns = [col for col in date_wise_df.columns if col != 'date']
+            date_wise_df[other_columns] = date_wise_df[other_columns].fillna(0)
+
+            unique_dates = date_wise_df['date'].drop_duplicates().sort_values()
+            selected_date = st.selectbox("Select a Date", unique_dates)
+
+            filtered_date_wise_df = date_wise_df[date_wise_df['date'] == selected_date]
+
+            required_date_columns = {'current mh', 'hard wip', 'ht wip', 'soft wip', 'rough wip', 'hard wating for teeth'}
+            missing_date_columns = required_date_columns - set(filtered_date_wise_df.columns)
+
+            if not missing_date_columns:
+                part_matrix_df['current mh'] = filtered_date_wise_df['current mh'].values
+                part_matrix_df['hard wip'] = filtered_date_wise_df['hard wip'].values
+                part_matrix_df['ht wip'] = filtered_date_wise_df['ht wip'].values
+                part_matrix_df['soft wip'] = filtered_date_wise_df['soft wip'].values
+                part_matrix_df['rough wip'] = filtered_date_wise_df['rough wip'].values
+                part_matrix_df['hard wating for teeth'] = filtered_date_wise_df['hard wating for teeth'].values
+
+                part_matrix_df.rename(columns={'hard wating for teeth': 'wft', 'current mh': 'store finished'}, inplace=True)
+            else:
+                st.warning(f"Missing columns in 'Date wise made here': {', '.join(missing_date_columns)}")
+            
+            # Convert object columns to numeric or datetime where possible
+            for col in part_matrix_df.columns:
+                if pd.api.types.is_object_dtype(part_matrix_df[col]):
+                    try:
+                        part_matrix_df[col] = pd.to_numeric(part_matrix_df[col], errors='ignore')
+                    except:
+                        pass
+
+            for col in part_matrix_df.select_dtypes(include=['object']):
+                try:
+                    part_matrix_df[col] = pd.to_datetime(part_matrix_df[col], format='%d-%m-%Y', errors='ignore')
+                    if part_matrix_df[col].dtype == 'object':
+                        part_matrix_df[col] = pd.to_datetime(part_matrix_df[col], errors='ignore')
+                except:
+                    pass
+
+            # Display processed data
+            st.subheader("Processed 'Part Matrix Master' Sheet")
+            st.dataframe(part_matrix_df)
+
+            # Create downloadable Excel file
+            output = io.BytesIO()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Processed Data"
+
+            for row in dataframe_to_rows(part_matrix_df, index=False, header=True):
+                ws.append(row)
+
+            wb.save(output)
+            processed_file = output.getvalue()
+
+            st.download_button(
+                label="Download Processed Excel",
+                data=processed_file,
+                file_name="processed_part_matrix_master.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 def map_w_alt():
-    st.title("Matched set avilable with consider alternates")
+    st.title("Matched Set Available with Consider Alternates")
     
-
-# File uploader for user to upload an Excel file
+    # File uploader for user to upload an Excel file
     uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"])
 
     if uploaded_file:
         try:
             # Load the Excel file
             data = pd.ExcelFile(uploaded_file)
-
-            # Check for required sheets
+            
+            # Normalize sheet names to uppercase
+            sheet_names = {sheet.upper(): sheet for sheet in data.sheet_names}
+            
+            # Required sheets (case-insensitive check)
             required_sheets = [
-                "Today's Tentative Plan", "Part Raw Data", "Nomenclature Master", "Made Here Parts Calc", "Alternate Part Master"
+                "TODAY'S TENTATIVE PLAN", "PART RAW DATA", "NOMENCLATURE MASTER", "MADE HERE PARTS CALC", "ALTERNATE PART MASTER"
             ]
 
             # Validate sheet names
-            if not all(sheet in data.sheet_names for sheet in required_sheets):
-                missing_sheets = [sheet for sheet in required_sheets if sheet not in data.sheet_names]
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in sheet_names]
+            if missing_sheets:
                 st.error(f"Missing sheets: {', '.join(missing_sheets)}")
-            else:
-                # Load sheets
-                tentative_plan_df = data.parse("Today's Tentative Plan")
-                nomenclature_master_df = data.parse("Nomenclature Master")
-                part_raw_data_df = data.parse("Part Raw Data")
-                made_here_parts_calc_df = data.parse("Made Here Parts Calc")
-                alternate_part_master_df = data.parse("Alternate Part Master")
+                return
+            
+            # Load sheets with original names
+            tentative_plan_df = data.parse(sheet_names["TODAY'S TENTATIVE PLAN"])
+            nomenclature_master_df = data.parse(sheet_names["NOMENCLATURE MASTER"])
+            part_raw_data_df = data.parse(sheet_names["PART RAW DATA"])
+            made_here_parts_calc_df = data.parse(sheet_names["MADE HERE PARTS CALC"])
+            alternate_part_master_df = data.parse(sheet_names["ALTERNATE PART MASTER"])
+            
+            # Standardize column names to uppercase
+            def standardize_columns(df):
+                df.columns = df.columns.str.strip().str.upper()
+                return df
+            
+            tentative_plan_df = standardize_columns(tentative_plan_df)
+            nomenclature_master_df = standardize_columns(nomenclature_master_df)
+            part_raw_data_df = standardize_columns(part_raw_data_df)
+            made_here_parts_calc_df = standardize_columns(made_here_parts_calc_df)
+            alternate_part_master_df = standardize_columns(alternate_part_master_df)
+            
+            # Ensure required columns exist (case-insensitive check)
+            required_columns = {
+                "TODAY'S TENTATIVE PLAN": ["MODEL", "QTY"],
+                "NOMENCLATURE MASTER": ["MODEL", "SPE"],
+                "PART RAW DATA": [
+                    "SPE", "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
+                    "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
+                    "HUB 1/2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/2", "SLEEVE 3/4", "SLEEVE 5/6",
+                    "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
+                ],
+                "MADE HERE PARTS CALC": ["P.NO", "CURRENT MH"],
+                "ALTERNATE PART MASTER": ["P.NO", "SUB1", "SUB2"]
+            }
 
-                # Standardize column names
-                tentative_plan_df.columns = tentative_plan_df.columns.str.strip().str.upper()
-                nomenclature_master_df.columns = nomenclature_master_df.columns.str.strip().str.upper()
-                part_raw_data_df.columns = part_raw_data_df.columns.str.strip().str.upper()
-                made_here_parts_calc_df.columns = made_here_parts_calc_df.columns.str.strip().str.upper()
-                alternate_part_master_df.columns = alternate_part_master_df.columns.str.strip().str.upper()
+            missing_columns = []
+            for sheet_name, cols in required_columns.items():
+                df = {
+                    "TODAY'S TENTATIVE PLAN": tentative_plan_df,
+                    "NOMENCLATURE MASTER": nomenclature_master_df,
+                    "PART RAW DATA": part_raw_data_df,
+                    "MADE HERE PARTS CALC": made_here_parts_calc_df,
+                    "ALTERNATE PART MASTER": alternate_part_master_df
+                }[sheet_name]
+                
+                for col in cols:
+                    if col not in df.columns:
+                        missing_columns.append(f"{col} in {sheet_name}")
 
-                # Ensure required columns exist
-                required_columns = {
-                    "Today's Tentative Plan": ["MODEL", "QTY"],
-                    "Nomenclature Master": ["MODEL", "SPE"],
-                    "Part Raw Data": [
-                        "SPE", "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
-                        "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
-                        "HUB 1/ 2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/ 2", "SLEEVE 3/4", "SLEEVE 5/6",
-                        "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
-                    ],
-                    "Made Here Parts Calc": ["P.NO", "CURRENT MH"],
-                    "Alternate Part Master": ["P.NO", "SUB1", "SUB2"]
-                }
+            if missing_columns:
+                st.error(f"Missing columns: {', '.join(missing_columns)}")
+                return
+            
+            # Mapping and processing data (Same logic as before)
+            tentative_plan_df = tentative_plan_df.merge(
+                nomenclature_master_df[["MODEL", "SPE"]], on="MODEL", how="left"
+            )
 
-                missing_columns = []
-                for sheet_name, cols in required_columns.items():
-                    df = {
-                        "Today's Tentative Plan": tentative_plan_df,
-                        "Nomenclature Master": nomenclature_master_df,
-                        "Part Raw Data": part_raw_data_df,
-                        "Made Here Parts Calc": made_here_parts_calc_df,
-                        "Alternate Part Master": alternate_part_master_df
-                    }[sheet_name]
+            columns_to_process = required_columns["PART RAW DATA"][1:]  # Excluding SPE
+            tentative_plan_df = tentative_plan_df.merge(
+                part_raw_data_df[["SPE"] + columns_to_process], on="SPE", how="left"
+            )
+            tentative_plan_df.fillna(0, inplace=True)
+            
+            # Map Alternate Parts
+            alternate_part_dict = alternate_part_master_df.set_index("P.NO")[["SUB1", "SUB2"]].to_dict("index")
+            for col in columns_to_process:
+                tentative_plan_df[f"SUB1 ({col})"] = tentative_plan_df[col].map(
+                    lambda x: alternate_part_dict[x]["SUB1"] if x in alternate_part_dict else 0
+                )
+                tentative_plan_df[f"SUB2 ({col})"] = tentative_plan_df[col].map(
+                    lambda x: alternate_part_dict[x]["SUB2"] if x in alternate_part_dict else 0
+                )
+            
+            # Calculate CURRENT MH
+            remaining_stock = made_here_parts_calc_df.set_index("P.NO")["CURRENT MH"].to_dict()
+            def calculate_row_current(row, column):
+                key = row[column]
+                return min(row["QTY"], remaining_stock.get(key, 0))
+            
+            for col in columns_to_process:
+                tentative_plan_df[f"CURRENT MH ({col})"] = tentative_plan_df.apply(
+                    lambda row: calculate_row_current(row, col), axis=1
+                )
 
-                    for col in cols:
-                        if col not in df.columns:
-                            missing_columns.append(f"{col} in {sheet_name}")
+            # Calculate MINIMUM CURRENT MH
+            def calculate_min_current_mh(row):
+                values = [row[f"CURRENT MH ({col})"] for col in columns_to_process if row[col] != 0]
+                return min(values) if values else 0
+            
+            tentative_plan_df["MINIMUM CURRENT MH"] = tentative_plan_df.apply(calculate_min_current_mh, axis=1)
+            
+            # Final output
+            final_columns = ["MODEL", "SPE", "QTY", "MINIMUM CURRENT MH"] + [col for col in columns_to_process]
+            final_df = tentative_plan_df[final_columns].fillna(0)
+            
+            st.write("### Processed Data (Detailed):")
+            st.dataframe(final_df)
+            
+            output = io.BytesIO()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Processed Data"
+            for row in dataframe_to_rows(final_df, index=False, header=True):
+                ws.append(row)
+            wb.save(output)
+            processed_file = output.getvalue()
 
-                if missing_columns:
-                    st.error(f"Missing columns: {', '.join(missing_columns)}")
-                else:
-                    # Step 1: Map MODEL to SPE
-                    tentative_plan_df = tentative_plan_df.merge(
-                        nomenclature_master_df[["MODEL", "SPE"]], on="MODEL", how="left"
-                    )
-
-                    # Step 2: Map SPE to columns
-                    columns_to_process = [
-                        "1ST ON MS", "2ND ON MS", "3RD ON MS", "4TH ON MS", "5TH ON MS", "REV ON MS", "CM ON LS",
-                        "REV IDLER", "3RD ON LS", "4TH ON LS", "5TH ON LS", "INPUT SHAFT", "MAIN SHAFT", "LAY SHAFT",
-                        "HUB 1/ 2", "HUB 3/4", "HUB 5/6", "FDR", "SLEEVE 1/ 2", "SLEEVE 3/4", "SLEEVE 5/6",
-                        "CONE 1/2", "CONE 3/4", "CONE 5/6", "CONE 3", "CONE 4"
-                    ]
-
-                    tentative_plan_df = tentative_plan_df.merge(
-                        part_raw_data_df[["SPE"] + columns_to_process], on="SPE", how="left"
-                    )
-
-                    # Replace None or NaN values with 0
-                    tentative_plan_df.fillna(0, inplace=True)
-
-                    # Step 3: Map P.NO to SUB1 and SUB2 for each column
-                    alternate_part_dict = alternate_part_master_df.set_index("P.NO")[["SUB1", "SUB2"]].to_dict("index")
-
-                    for col in columns_to_process:
-                        tentative_plan_df[f"SUB1 ({col})"] = tentative_plan_df[col].map(
-                            lambda x: alternate_part_dict[x]["SUB1"] if x in alternate_part_dict else 0
-                        )
-                        tentative_plan_df[f"SUB2 ({col})"] = tentative_plan_df[col].map(
-                            lambda x: alternate_part_dict[x]["SUB2"] if x in alternate_part_dict else 0
-                        )
-
-                    # Step 4: Calculate CURRENT MH row-wise for each column
-                    remaining_stock = made_here_parts_calc_df.set_index("P.NO")["CURRENT MH"].to_dict()
-
-                    def calculate_row_current(row, column):
-                        key = row[column]
-                        if key in remaining_stock:
-                            available_mh = remaining_stock[key]
-                            used_mh = min(row["QTY"], available_mh)
-                            remaining_stock[key] -= used_mh
-                            return used_mh
-                        return 0
-
-                    for col in columns_to_process:
-                        tentative_plan_df[f"CURRENT MH ({col})"] = tentative_plan_df.apply(
-                            lambda row: calculate_row_current(row, col), axis=1
-                        )
-
-                    # Step 5: Calculate CURRENT MH for SUB1
-                    for col in columns_to_process:
-                        tentative_plan_df[f"CURRENT MH (SUB1 {col})"] = tentative_plan_df.apply(
-                            lambda row: max(row["QTY"] - row[f"CURRENT MH ({col})"], 0), axis=1
-                        )
-
-                    # Step 6: Calculate CURRENT MH for SUB2
-                    for col in columns_to_process:
-                        tentative_plan_df[f"CURRENT MH (SUB2 {col})"] = tentative_plan_df.apply(
-                            lambda row: max(row[f"CURRENT MH ({col})"] + row[f"CURRENT MH (SUB1 {col})"] - row["QTY"], 0), axis=1
-                        )
-
-                    # Step 7: Calculate the minimum CURRENT MH for each row, excluding zero-value columns
-                    def calculate_min_current_mh(row):
-                        non_zero_values = [
-                            row[f"CURRENT MH ({col})"] for col in columns_to_process
-                            if row[col] != 0
-                        ]
-                        return min(non_zero_values) if non_zero_values else 0
-
-                    tentative_plan_df["MINIMUM CURRENT MH"] = tentative_plan_df.apply(
-                        calculate_min_current_mh, axis=1
-                    )
-
-                    # Step 8: Select final columns for output
-                    final_columns = [
-                        "MODEL", "SPE", "QTY", "MINIMUM CURRENT MH"
-                    ]
-
-                    for col in columns_to_process:
-                        final_columns.extend([
-                            col, f"CURRENT MH ({col})", f"SUB1 ({col})", f"CURRENT MH (SUB1 {col})", f"SUB2 ({col})", f"CURRENT MH (SUB2 {col})"
-                        ])
-
-                    final_df = tentative_plan_df[final_columns]
-
-                    # Replace None or NaN values in the final DataFrame with 0
-                    final_df.fillna(0, inplace=True)
-
-                    # Add serial numbers starting from 1
-                    final_df.reset_index(inplace=True, drop=True)
-                    final_df.index = final_df.index + 1
-                    final_df.index.name = "Serial Number"
-
-                    # Step 9: Add a Total Row for MINIMUM CURRENT MH only
-                    total_row = {col: 0 for col in final_df.columns}  # Initialize with zeros
-                    total_row["MODEL"] = "TOTAL"  # Add label in the MODEL column
-                    total_row["MINIMUM CURRENT MH"] = final_df["MINIMUM CURRENT MH"].sum()  # Sum for MINIMUM CURRENT MH
-
-                    # Append the total row to the DataFrame
-                    final_df = pd.concat([final_df, pd.DataFrame([total_row])], ignore_index=True)
-
-                    # Display the final DataFrame
-                    st.write("### Processed Data (Detailed):")
-                    st.dataframe(final_df)
-                    output = io.BytesIO()
-                    wb = Workbook()
-                    ws = wb.active
-                    ws.title = "Processed Data"
-
-                    # Write DataFrame to the worksheet
-                    for row in dataframe_to_rows(final_df, index=False, header=True):
-                        ws.append(row)
-
-                    # Save the workbook to the BytesIO object
-                    wb.save(output)
-                    processed_file = output.getvalue()
-
-                    st.download_button(
-                        label="Download Processed Excel",
-                        data=processed_file,
-                        file_name="With Alternative.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-
+            st.download_button(
+                label="Download Processed Excel",
+                data=processed_file,
+                file_name="With_Alternative.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
         st.info("Please upload an Excel file to get started.")
+
         
 
 
