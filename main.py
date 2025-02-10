@@ -108,6 +108,18 @@ def app_functionality():
         st.session_state.selected_option = selection
 
     # Sidebar expander for Matched Set
+    
+    # Sidebar expander for Additional Calculations
+    with st.sidebar.expander("Additional Calculations"):
+        if st.button("Part Calculation", key="part_calc"):
+            update_selection("Part Calculation")
+        if st.button("Priority Sheet", key="priority_sheet"):
+            update_selection("Priority Sheet")
+        if st.button("Month GB Req After OS", key="month_gb_req"):
+            update_selection("Month GB Req After OS")
+        if st.button("GB Req for Balance Month", key="gb_req_bal_month"):
+            update_selection("GB Req for Balance Month")
+    
     with st.sidebar.expander("Matched Set"):
         st.markdown("**Against Tentative Plan**")
         if st.button("Without Alternates", key="without_alt"):
@@ -129,16 +141,6 @@ def app_functionality():
         if st.button("4-Week Plan without Alternates", key="4_week_wout_alt"):
             update_selection("MPS Plan - 4 Weeks without Alternates")
 
-    # Sidebar expander for Additional Calculations
-    with st.sidebar.expander("Additional Calculations"):
-        if st.button("Part Calculation", key="part_calc"):
-            update_selection("Part Calculation")
-        if st.button("Priority Sheet", key="priority_sheet"):
-            update_selection("Priority Sheet")
-        if st.button("Month GB Req After OS", key="month_gb_req"):
-            update_selection("Month GB Req After OS")
-        if st.button("GB Req for Balance Month", key="gb_req_bal_month"):
-            update_selection("GB Req for Balance Month")
 
     # **Render the selected functionality**
     selected = st.session_state.selected_option
