@@ -154,7 +154,7 @@ def two_week_w_al():
     st.title('2-week-with-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -383,7 +383,7 @@ def two_week_wo_al():
     st.title('2-week-without-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -556,7 +556,7 @@ def four_week_with_alter():
     st.title('4-week-with-alternative')
 
 # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -789,7 +789,7 @@ def four_week_without_alter():
     st.title('4-week-without-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -961,7 +961,7 @@ def four_week_without_alter():
 def Gbreq():
     st.title("GB Requirement For Bal Month")
 
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader("Upload Excel File", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file:
         try:
@@ -1071,7 +1071,7 @@ def Month():
     st.title("Monthly GB Requirement After OS")
 
     # File upload
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader("Upload Excel File", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file:
         try:
@@ -1168,7 +1168,7 @@ def map_wout_alt():
     st.title("Matched Set Available Without Considering Alternates")
 
     # File uploader for user to upload an Excel file
-    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"], key='filee')
+    uploaded_file = st.file_uploader("Upload an Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"], key='filee')
 
     if uploaded_file:
         try:
@@ -1321,7 +1321,7 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
     st.title("Priority Analysis - P.NO with WIP, Description, and SUB1 Mapping")
 
     # File uploader
-    data_file = st.file_uploader("Upload the Excel file", type=["xlsx"])
+    data_file = st.file_uploader("Upload the Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if data_file is not None:
         try:
@@ -1452,7 +1452,7 @@ def process_part_matrix_master():
     st.title("Made Here Part Calculation")
     st.write("Upload an Excel file, and we'll process the 'Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here' sheets for you.")
 
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
+    uploaded_file = st.file_uploader("Choose an Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file:
         try:
@@ -1559,7 +1559,7 @@ def map_w_alt():
     st.title("Matched Set Available with Consider Alternates")
     
     # File uploader for user to upload an Excel file
-    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader("Upload an Excel file", type=["xls","xlsm","xlsx","xlt","xltx","xlsb"])
 
     if uploaded_file:
         try:
