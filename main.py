@@ -7,6 +7,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 import uuid
+from openpyxl.styles import PatternFill
 from io import BytesIO
 unique_key = str(uuid.uuid4())
 import re
@@ -76,6 +77,21 @@ def logout():
 
 
 def app_functionality():
+    
+    
+    uploaded_file = st.file_uploader("Upload Excel file (required for all functions)", 
+                                    type=["xlsx", "xls"], 
+                                    key="main_uploader")
+    
+    if uploaded_file:
+        st.session_state['uploaded_file'] = uploaded_file
+        st.success("File uploaded successfully!")
+    
+    if st.session_state.get('uploaded_file'):
+        st.write(f"Current file: {st.session_state.uploaded_file.name}")
+        if st.button("Clear Current File"):
+            del st.session_state['uploaded_file']
+    
     # Ensure user is logged in
     if "user" not in st.session_state:
         st.warning("Please log in to access the app.")
@@ -100,7 +116,8 @@ def app_functionality():
         "Part Calculation": process_part_matrix_master,
         "Priority Sheet": Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping,
         "Month GB Req After OS": Month,
-        "GB Req for Balance Month": Gbreq
+        "GB Req for Balance Month": Gbreq,
+        "Norms Master":Norms
     }
 
     # Function to update selection
@@ -141,6 +158,11 @@ def app_functionality():
             update_selection("MPS Plan - 4 Weeks with Alternates")
         if st.button("4-Week Plan without Alternates", key="4_week_wout_alt"):
             update_selection("MPS Plan - 4 Weeks without Alternates")
+            
+        
+    with st.sidebar.expander("Norms Master"):
+        if st.button("Norms master", key="nmster"):
+            update_selection('Norms Master')
 
 
     # **Render the selected functionality**
@@ -152,14 +174,176 @@ def app_functionality():
         else:
             st.warning("Functionality not yet implemented.")
             
+
+def Norms():
+    st.title("Norms Master")
+
+    # File Upload
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
+
+    if uploaded_file:
+        try:
+            # Read Excel file
+            xls = pd.ExcelFile(uploaded_file)
             
+            # Check if required sheets exist
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+            else:
+                # Read and process Norms Master
+                df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+                df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+                
+                # Ensure all required columns are present
+                required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+                df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+                missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+                if missing_columns:
+                    st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                    st.stop()
+                df_norms_master = df_norms_master[required_norms_columns]
+                
+                # Read and process Date wise made here
+                df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+                df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+                
+                required_gb_columns = ["Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+                df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+                missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+                if missing_gb_columns:
+                    st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                    st.stop()
+                df_gb_production = df_gb_production[required_gb_columns]
+                
+                # Convert Date to string for selection, removing NaT values
+                df_gb_production = df_gb_production.dropna(subset=["Date"])
+                df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+                
+                # Dropdown for Date Selection
+                selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+                
+                # Filter data based on selected date
+                filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+                
+                if filtered_df.empty:
+                    st.error("No data available for the selected date.")
+                else:
+                    filtered_df = filtered_df.drop(columns=["Date"])  # Remove Date column
+                    
+                    # Merge Norms Master with filtered Date wise made here
+                    merged_df = df_norms_master.copy()
+                    merged_df = merged_df.join(filtered_df.reset_index(drop=True))
+                    
+                    # Remove . values from all columns
+                    merged_df = merged_df.replace({r'\\.': ''}, regex=True)
+                    
+                    # Ensure numeric columns are correctly cast and remove floating values
+                    numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+                    for col in numeric_columns:
+                        if col in merged_df.columns:
+                            merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+                    
+                    # Apply conditional formatting to Current MH column based on conditions
+                    def highlight_current_mh(row):
+                        if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                            value = (row["Current MH"] * row["Norms"]) / 100
+                            if row["Current MH"] > row["Norms"]:
+                                return ["background-color: white" if col == "Current MH" else "" for col in merged_df.columns]
+                            elif value > 67:
+                                return ["background-color: green" if col == "Current MH" else "" for col in merged_df.columns]
+                            elif 33 < value <= 67:
+                                return ["background-color: yellow" if col == "Current MH" else "" for col in merged_df.columns]
+                            elif 0 < value <= 33:
+                                return ["background-color: red" if col == "Current MH" else "" for col in merged_df.columns]
+                            elif value == 0:
+                                return ["background-color: black" if col == "Current MH" else "" for col in merged_df.columns]
+                        return [""] * len(merged_df.columns)  # Default no color
+
+                    styled_df = merged_df.style.apply(highlight_current_mh, axis=1)    
+                    st.subheader("Merged Data Preview")
+                    st.dataframe(styled_df)
+                    
+                    # Create Excel file with conditional formatting
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                        workbook = writer.book
+                        worksheet = writer.sheets['Sheet1']
+                        
+                        # Define colors
+                        green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                        red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                        white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                        black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+                        
+                        # Find the column index for "Current MH"
+                        current_mh_col = None
+                        for idx, col in enumerate(merged_df.columns, 1):
+                            if col == "Current MH":
+                                current_mh_col = idx
+                                break
+                        
+                        if current_mh_col:
+                            # Apply conditional formatting rules
+                            for row in range(2, len(merged_df) + 2):
+                                cell = worksheet.cell(row=row, column=current_mh_col)
+                                value = (cell.value * merged_df.at[row-2, "Norms"]) / 100
+                                if cell.value > merged_df.at[row-2, "Norms"]:
+                                    cell.fill = white_fill
+                                elif value > 67:
+                                    cell.fill = green_fill
+                                elif 33 < value <= 67:
+                                    cell.fill = yellow_fill
+                                elif 0 < value <= 33:
+                                    cell.fill = red_fill
+                                elif value == 0:
+                                    cell.fill = black_fill
+                    
+                    # Download button for user output sheet
+                    output.seek(0)
+                    st.download_button(
+                        label="Download Processed Data",
+                        data=output,
+                        file_name="processed_data.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+        
+        except Exception as e:
+            st.error(f"Error processing file: {e}")
+          
 def two_week_w_al():
     # Title of the app
     st.title('2-week-with-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx","xlsm","xlsb","xltx"])
-
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
+        
+        
     if uploaded_file is not None:
         # Load the Excel file
         try:
@@ -387,7 +571,18 @@ def two_week_wo_al():
     st.title('2-week-without-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
+    
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -560,8 +755,19 @@ def four_week_with_alter():
     st.title('4-week-with-alternative')
 
 # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx","xlsm","xlsb","xltx"])
-
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
+    
+    
     if uploaded_file is not None:
         # Load the Excel file
         try:
@@ -793,7 +999,17 @@ def four_week_without_alter():
     st.title('4-week-without-alternative')
 
     # File uploader widget to upload the Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file is not None:
         # Load the Excel file
@@ -960,122 +1176,122 @@ def four_week_without_alter():
             st.error(f"Error reading the Excel file: {e}")
 
 
-        
-
 def Gbreq():
     st.title("GB Requirement For Bal Month")
 
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file:
         try:
             workbook = pd.ExcelFile(uploaded_file)
-            sheet_names = [name.lower() for name in workbook.sheet_names]
+            sheet_names = {name.lower() for name in workbook.sheet_names}
+            required_sheets = {"monthly opening stock", "3 month plan", "day wise gb production", "month gb requirement after os"}
 
-            if "monthly opening stock" not in sheet_names or "3 month plan" not in sheet_names:
-                st.error("Ensure the Excel file has sheets named 'Monthly Opening Stock' and '3 Month Plan'.")
-            else:
-                os_sheet = pd.read_excel(workbook, sheet_name=[s for s in workbook.sheet_names if s.lower() == "monthly opening stock"][0])
-                plan_sheet = pd.read_excel(workbook, sheet_name=[s for s in workbook.sheet_names if s.lower() == "3 month plan"][0])
+            if not required_sheets.issubset(sheet_names):
+                st.error("Ensure the Excel file has required sheets.")
+                return
+
+            os_sheet = pd.read_excel(workbook, sheet_name="Monthly Opening Stock")
+            plan_sheet = pd.read_excel(workbook, sheet_name="3 Month Plan")
+            day_wise_gb_production = pd.read_excel(workbook, sheet_name="Day Wise GB Production")
+            month_gb_req_sheet = pd.read_excel(workbook, sheet_name="Month GB requirement after OS")
+
+            for df in [os_sheet, plan_sheet, day_wise_gb_production, month_gb_req_sheet]:
+                df.columns = df.columns.str.lower()
+
+            results = []
+
+            w1_rev_values = month_gb_req_sheet["plan for w1"].tolist() if "plan for w1" in month_gb_req_sheet.columns else [0] * len(day_wise_gb_production)
+            w2_plan_values = month_gb_req_sheet["plan for w2"].tolist() if "plan for w2" in month_gb_req_sheet.columns else [0] * len(day_wise_gb_production)
+            w3_plan_values = month_gb_req_sheet["plan for w3"].tolist() if "plan for w3" in month_gb_req_sheet.columns else [0] * len(day_wise_gb_production)
+            w4_plan_values = month_gb_req_sheet["plan for w4"].tolist() if "plan for w4" in month_gb_req_sheet.columns else [0] * len(day_wise_gb_production)
+
+            for i, row in day_wise_gb_production.iterrows():
+                gb_value = row.get("gb", 0)
+                week_sums = [day_wise_gb_production.filter(like=f"w{w}").iloc[i].sum() if i < len(day_wise_gb_production) else 0 for w in range(1, 5)]
                 
-                os_sheet.columns = os_sheet.columns.str.lower()
-                plan_sheet.columns = plan_sheet.columns.str.lower()
+                w1_rev = w1_rev_values[i] if i < len(w1_rev_values) else 0
+                w1_excess_less = w1_rev - week_sums[0]  # Applying W1 Excess / Less formula
+                w2_plan = w2_plan_values[i] if i < len(w2_plan_values) else 0
+                w2_rev_plan = w1_excess_less + w2_plan  # Updated W2 Rev Plan formula
+                w2_rev_plan_wo_neg = max(0, w2_rev_plan)
+                week_2_excess_less = w2_rev_plan - week_sums[1]  # Corrected formula for Week 2 Excess / Less
+                w3_plan = w3_plan_values[i] if i < len(w3_plan_values) else 0
+                w3_rev_plan = w3_plan + week_2_excess_less  # Updated W3 Rev Plan formula
+                w3_rev_plan_wo_neg = max(0, w3_rev_plan)
+                week_3_excess_less = w3_rev_plan - week_sums[2]  # Applying correct formula for Week 3 Excess / Less
+                w4_plan = w4_plan_values[i] if i < len(w4_plan_values) else 0
+                w3_4_rev_plan = w4_plan + week_3_excess_less  # Updated W3&4 Rev Plan formula
+                w4_rev_plan_wo_neg = max(0, w3_4_rev_plan)
 
-                # Extract months from headers
-                month_headers = list(
-                    set(
-                        [
-                            col.split(" w")[0]
-                            for col in plan_sheet.columns
-                            if "w" in col
-                        ]
-                    )
-                )
+                results.append({
+                    "GB": gb_value,
+                    "Total": sum(week_sums),
+                    "W1": week_sums[0],
+                    "W2": week_sums[1],
+                    "W3": week_sums[2],
+                    "W4": week_sums[3],
+                    "W1 Rev": w1_rev,
+                    "W1 Excess/Less": w1_excess_less,
+                    "W2 Rev Plan": w2_rev_plan,
+                    "W2 Rev Plan w/o Neg": w2_rev_plan_wo_neg,
+                    "Week 2 Excess/Less": week_2_excess_less,
+                    "W3 Rev Plan": w3_rev_plan,
+                    "W3 Rev Plan w/o Neg": w3_rev_plan_wo_neg,
+                    "Week 3 Excess/Less": week_3_excess_less,
+                    "W3&4 Rev Plan": w3_4_rev_plan,
+                    "W4 Rev Plan w/o Neg": w4_rev_plan_wo_neg,
+                })
 
-                selected_month = st.selectbox("Select Month", month_headers)
+            results_df_gb = pd.DataFrame(results).fillna(0)
+            st.dataframe(results_df_gb, use_container_width=True)
 
-                if selected_month:
-                    st.subheader(f"Results for {selected_month}")
+            output = io.BytesIO()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Processed Data"
 
-                    results = []
+            for row in dataframe_to_rows(results_df_gb, index=False, header=True):
+                ws.append(row)
 
-                    for i, row in os_sheet.iterrows():
-                        gb_value = row.get("gb", 0)
-                        opening_stock = row.get("opening stock", 0)
+            wb.save(output)
+            processed_file = output.getvalue()
 
-                        w1_plan = plan_sheet.get(f"{selected_month} w1", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w2_plan = plan_sheet.get(f"{selected_month} w2", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w3_plan = plan_sheet.get(f"{selected_month} w3", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-                        w4_plan = plan_sheet.get(f"{selected_month} w4", pd.Series([0])).iloc[i] if i < len(plan_sheet) else 0
-
-                        w1_rev = max(0, w1_plan - opening_stock)
-                        w1_excess = w1_rev - w1_plan
-
-                        w2_rev_plan = w2_plan + w1_excess
-                        w2_rev_plan_wn = max(0, w2_rev_plan)
-                        week2_excess = w2_rev_plan - w2_plan
-
-                        w3_rev_plan = w3_plan + week2_excess
-                        w3_rev_plan_wn = max(0, w3_rev_plan)
-                        week3_excess = w3_rev_plan - w3_plan
-
-                        w4_rev_plan = w4_plan + week3_excess
-                        w4_rev_plan_wn = max(0, w4_rev_plan)
-
-                        results.append(
-                            {
-                                "GB": gb_value,
-                                "Total": w1_plan + w2_plan + w3_plan + w4_plan,
-                                "W1": w1_plan,
-                                "W2": w2_plan,
-                                "W3": w3_plan,
-                                "W4": w4_plan,
-                                "W1 Rev": w1_rev,
-                                "W1 Excess": w1_excess,
-                                "W2 Rev Plan": w2_rev_plan,
-                                "W2 Rev Plan w/o Negative": w2_rev_plan_wn,
-                                "Week 2 Excess / Less": week2_excess,
-                                "W3 Rev Plan": w3_rev_plan,
-                                "W3 Rev Plan w/o Negative": w3_rev_plan_wn,
-                                "Week 3 Excess / Less": week3_excess,
-                                "W4 Rev Plan": w4_rev_plan,
-                                "W4 Rev Plan w/o Negative": w4_rev_plan_wn,
-                            }
-                        )
-
-                    results_df_gb = pd.DataFrame(results)
-                    results_df_gb.fillna(0, inplace=True)
-
-                    st.dataframe(results_df_gb, use_container_width=True)
-
-                    output = io.BytesIO()
-                    wb = Workbook()
-                    ws = wb.active
-                    ws.title = "Processed Data"
-
-                    # Write DataFrame to the worksheet
-                    for row in dataframe_to_rows(results_df_gb, index=False, header=True):
-                        ws.append(row)
-
-                    # Save the workbook to the BytesIO object
-                    wb.save(output)
-                    processed_file = output.getvalue()
-
-                    st.download_button(
-                        label="Download Processed Excel",
-                        data=processed_file,
-                        file_name="GB Requirement For Bal Month.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+            st.download_button(
+                label="Download Processed Excel",
+                data=processed_file,
+                file_name="GB_Requirement_For_Bal_Month.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         except Exception as e:
-            st.error(f"Error processing file: {e}")
+            st.error(f"Error processing file: {e}")        
 
 
 def Month():
     st.title("Monthly GB Requirement After OS")
 
     # File upload
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file:
         try:
@@ -1171,7 +1387,17 @@ def map_wout_alt():
     st.title("Mapped set without alternative")
 
     # File uploader for user to upload an Excel file
-    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file:
         try:
@@ -1343,8 +1569,20 @@ def Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping():
     st.title("Priority Sheet")
 
     # File uploader
-    data_file = st.file_uploader("Upload the Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
+    data_file = uploaded_file
+    
     if data_file is not None:
         try:
             # Read the uploaded Excel file
@@ -1474,7 +1712,17 @@ def process_part_matrix_master():
     st.title("Made Here Part Calculation")
     st.write("Upload an Excel file, and we'll process the 'Part Matrix Master', 'GB Requirement for Bal Month', and 'Date wise made here' sheets for you.")
 
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file:
         try:
@@ -1581,7 +1829,17 @@ def map_w_alt():
     st.title("mapped set with alternative")
 
     # File uploader for user to upload an Excel file
-    uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx","xlsm","xlsb","xltx"])
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+        
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+        # Rest of processing logic...
+    
+    except Exception as e:
+        st.error(f"Processing error: {str(e)}")
 
     if uploaded_file:
         try:
