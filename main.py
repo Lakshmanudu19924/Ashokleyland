@@ -319,7 +319,7 @@ def Norms():
                     st.download_button(
                         label="Download Processed Data",
                         data=output,
-                        file_name="processed_data.xlsx",
+                        file_name="Norms_Master.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
         
