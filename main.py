@@ -13,66 +13,7 @@ unique_key = str(uuid.uuid4())
 import re
 
 
-firebaseConfig = {
-  "apiKey": "AIzaSyAcQpRtTUZ_LH9MqKuV0IJ51zqD_tAU410",
-  "authDomain": "ashok-88fd9.firebaseapp.com",
-  "projectId": "ashok-88fd9",
-  "storageBucket": "ashok-88fd9.firebasestorage.app",
-  "messagingSenderId": "249675153769",
-  "appId": "1:249675153769:web:c59ed35637fcc4b9dc7df8",
-  "measurementId": "G-PQFTZ53R4M",
-  "databaseURL": "https://ashok-88fd9-default-rtdb.firebaseio.com"
-}
 
-firebase = pyrebase.initialize_app(firebaseConfig)
-auth_client = firebase.auth()
-
-if not firebase_admin._apps:
-    cred = credentials.Certificate("ashok-88fd9-firebase-adminsdk-fbsvc-a87adc24e7.json")  # Replace with your Firebase Admin SDK JSON file
-    firebase_admin.initialize_app(cred)
-
-
-
-def login():
-    st.title("Login")
-
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        try:
-            user = auth_client.sign_in_with_email_and_password(email, password)
-            st.success("Successfully logged in!")
-            st.session_state["user"] = user
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-
-def register():
-    st.title("Register")
-
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    confirm_password = st.text_input("Confirm Password", type="password")
-
-    if st.button("Register"):
-        # Check if the email domain matches
-        if not email.endswith("@ashokleyland.com"):
-            st.error("Registration is restricted to @ashokleyland.com email addresses.")
-        elif password != confirm_password:
-            st.error("Passwords do not match!")
-        else:
-            try:
-                auth_client.create_user_with_email_and_password(email, password)
-                st.success("Successfully registered! Please log in.")
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-
-def logout():
-    if "user" in st.session_state:
-        del st.session_state["user"]
-        st.success("Logged out successfully!")
         
 
 
@@ -92,10 +33,7 @@ def app_functionality():
         if st.button("Clear Current File"):
             del st.session_state['uploaded_file']
     
-    # Ensure user is logged in
-    if "user" not in st.session_state:
-        st.warning("Please log in to access the app.")
-        st.stop()
+    
 
     # Initialize session state variables
     if "selected_option" not in st.session_state:
@@ -117,7 +55,12 @@ def app_functionality():
         "Priority Sheet": Priority_Analysis_P_NO_with_WIP_Description_and_SUB1_Mapping,
         "Month GB Req After OS": Month,
         "GB Req for Balance Month": Gbreq,
-        "Norms Master":Norms
+        "Norms Master":Norms,
+        "Norms Master White":Norms_White,
+        "Norms Master green":Norms_Green,
+        "Norms Master yellow":Norms_yellow,
+        "Norms Master red":Norms_red,
+        "Norms Master black":Norms_black,
     }
 
     # Function to update selection
@@ -161,9 +104,18 @@ def app_functionality():
             
         
     with st.sidebar.expander("Norms Master"):
-        if st.button("Norms master", key="nmster"):
+        if st.button("Norms master", key="full"):
             update_selection('Norms Master')
-
+        if st.button("Norms master White", key="White"):
+            update_selection('Norms Master White')
+        if st.button("Norms Master green",key="green"):
+            update_selection("Norms Master green")
+        if st.button("Norms Master yellow",key="yellow"):
+            update_selection("Norms Master yellow")
+        if st.button("Norms Master red",key="red"):
+            update_selection("Norms Master red")
+        if st.button("Norms Master black",key="black"):
+            update_selection("Norms Master black")
 
     # **Render the selected functionality**
     selected = st.session_state.selected_option
@@ -173,159 +125,980 @@ def app_functionality():
             options[selected]()  # Call the corresponding function
         else:
             st.warning("Functionality not yet implemented.")
-            
 
 def Norms():
     st.title("Norms Master")
-
-    # File Upload
+    
+    # File Upload Check
     if 'uploaded_file' not in st.session_state:
         st.warning("Please upload file in main section first!")
         return
-        
     try:
         uploaded_file = st.session_state['uploaded_file']
         xls = pd.ExcelFile(uploaded_file)
-        # Rest of processing logic...
-    
     except Exception as e:
-        st.error(f"Processing error: {str(e)}")
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
 
     if uploaded_file:
         try:
-            # Read Excel file
             xls = pd.ExcelFile(uploaded_file)
-            
-            # Check if required sheets exist
             required_sheets = ["Date wise made here", "Norms Master"]
             existing_sheets = xls.sheet_names
-            
             missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
             if missing_sheets:
                 st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
-            else:
-                # Read and process Norms Master
-                df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
-                df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
-                
-                # Ensure all required columns are present
-                required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
-                df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
-                missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
-                if missing_columns:
-                    st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
-                    st.stop()
-                df_norms_master = df_norms_master[required_norms_columns]
-                
-                # Read and process Date wise made here
-                df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
-                df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
-                
-                required_gb_columns = ["Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
-                df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
-                missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
-                if missing_gb_columns:
-                    st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
-                    st.stop()
-                df_gb_production = df_gb_production[required_gb_columns]
-                
-                # Convert Date to string for selection, removing NaT values
-                df_gb_production = df_gb_production.dropna(subset=["Date"])
-                df_gb_production["Date"] = df_gb_production["Date"].astype(str)
-                
-                # Dropdown for Date Selection
-                selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
-                
-                # Filter data based on selected date
-                filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
-                
-                if filtered_df.empty:
-                    st.error("No data available for the selected date.")
-                else:
-                    filtered_df = filtered_df.drop(columns=["Date"])  # Remove Date column
-                    
-                    # Merge Norms Master with filtered Date wise made here
-                    merged_df = df_norms_master.copy()
-                    merged_df = merged_df.join(filtered_df.reset_index(drop=True))
-                    
-                    # Remove . values from all columns
-                    merged_df = merged_df.replace({r'\\.': ''}, regex=True)
-                    
-                    # Ensure numeric columns are correctly cast and remove floating values
-                    numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
-                    for col in numeric_columns:
-                        if col in merged_df.columns:
-                            merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
-                    
-                    # Apply conditional formatting to Current MH column based on conditions
-                    def highlight_current_mh(row):
-                        if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
-                            value = (row["Current MH"] * row["Norms"]) / 100
-                            if row["Current MH"] > row["Norms"]:
-                                return ["background-color: white" if col == "Current MH" else "" for col in merged_df.columns]
-                            elif value > 67:
-                                return ["background-color: green" if col == "Current MH" else "" for col in merged_df.columns]
-                            elif 33 < value <= 67:
-                                return ["background-color: yellow" if col == "Current MH" else "" for col in merged_df.columns]
-                            elif 0 < value <= 33:
-                                return ["background-color: red" if col == "Current MH" else "" for col in merged_df.columns]
-                            elif value == 0:
-                                return ["background-color: black" if col == "Current MH" else "" for col in merged_df.columns]
-                        return [""] * len(merged_df.columns)  # Default no color
+                return
 
-                    styled_df = merged_df.style.apply(highlight_current_mh, axis=1)    
-                    st.subheader("Merged Data Preview")
-                    st.dataframe(styled_df)
-                    
-                    # Create Excel file with conditional formatting
-                    output = BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
-                        workbook = writer.book
-                        worksheet = writer.sheets['Sheet1']
-                        
-                        # Define colors
-                        green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
-                        yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-                        red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
-                        white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-                        black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
-                        
-                        # Find the column index for "Current MH"
-                        current_mh_col = None
-                        for idx, col in enumerate(merged_df.columns, 1):
-                            if col == "Current MH":
-                                current_mh_col = idx
-                                break
-                        
-                        if current_mh_col:
-                            # Apply conditional formatting rules
-                            for row in range(2, len(merged_df) + 2):
-                                cell = worksheet.cell(row=row, column=current_mh_col)
-                                value = (cell.value * merged_df.at[row-2, "Norms"]) / 100
-                                if cell.value > merged_df.at[row-2, "Norms"]:
-                                    cell.fill = white_fill
-                                elif value > 67:
-                                    cell.fill = green_fill
-                                elif 33 < value <= 67:
-                                    cell.fill = yellow_fill
-                                elif 0 < value <= 33:
-                                    cell.fill = red_fill
-                                elif value == 0:
-                                    cell.fill = black_fill
-                    
-                    # Download button for user output sheet
-                    output.seek(0)
-                    st.download_button(
-                        label="Download Processed Data",
-                        data=output,
-                        file_name="Norms_Master.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-        
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["background-color: white" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["background-color: green" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["background-color: yellow" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["background-color: red" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["background-color: black" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
         except Exception as e:
-            st.error(f"Error processing file: {e}")
-          
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+
+def Norms_White():
+    st.title("Norms Master White")
+    
+    # File Upload Check
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
+
+    if uploaded_file:
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+                return
+
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["background-color: white" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master_White.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+def Norms_black():
+    st.title("Norms Master black")
+    
+    # File Upload Check
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
+
+    if uploaded_file:
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+                return
+
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["background-color: black" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master_black.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+            
+def Norms_Green():
+    st.title("Norms Master green")
+    
+    # File Upload Check
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
+
+    if uploaded_file:
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+                return
+
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["background-color: green" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master_Green.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+
+def Norms_yellow():
+    st.title("Norms Master yellow")
+    
+    # File Upload Check
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
+
+    if uploaded_file:
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+                return
+
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["background-color: yellow" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master_yellow.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+
+def Norms_red():
+    st.title("Norms Master red")
+    
+    # File Upload Check
+    if 'uploaded_file' not in st.session_state:
+        st.warning("Please upload file in main section first!")
+        return
+    try:
+        uploaded_file = st.session_state['uploaded_file']
+        xls = pd.ExcelFile(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {str(e)}")
+        return
+
+    if uploaded_file:
+        try:
+            xls = pd.ExcelFile(uploaded_file)
+            required_sheets = ["Date wise made here", "Norms Master"]
+            existing_sheets = xls.sheet_names
+            missing_sheets = [sheet for sheet in required_sheets if sheet not in existing_sheets]
+            if missing_sheets:
+                st.error(f"Missing sheet(s): {', '.join(missing_sheets)}. Please upload a valid file.")
+                return
+
+            # Read and process Norms Master
+            df_norms_master = pd.read_excel(xls, sheet_name="Norms Master")
+            df_norms_master.columns = df_norms_master.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_norms_columns = ["Material", "FMS", "Norms", "Cat"]
+            df_norms_master = df_norms_master.rename(columns={col: col.strip() for col in df_norms_master.columns})
+            missing_columns = [col for col in required_norms_columns if col not in df_norms_master.columns]
+            if missing_columns:
+                st.error(f"Missing columns in Norms Master: {', '.join(missing_columns)}")
+                return
+
+            df_norms_master = df_norms_master[required_norms_columns].fillna(0)
+            numeric_columns = ["Norms"]
+            for col in numeric_columns:
+                df_norms_master[col] = pd.to_numeric(df_norms_master[col], errors='coerce').fillna(0).astype(int)
+
+            df_norms_master = df_norms_master[df_norms_master["Norms"] != 0]
+
+            # Read and process Date Wise Made Here
+            df_gb_production = pd.read_excel(xls, sheet_name="Date wise made here")
+            df_gb_production.columns = df_gb_production.columns.str.strip().str.replace("\\s+", " ", regex=True)
+
+            required_gb_columns = ["Part No", "Date", "Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP"]
+            df_gb_production = df_gb_production.rename(columns={col: col.strip() for col in df_gb_production.columns})
+            missing_gb_columns = [col for col in required_gb_columns if col not in df_gb_production.columns]
+            if missing_gb_columns:
+                st.error(f"Missing columns in Date wise made here: {', '.join(missing_gb_columns)}")
+                return
+
+            df_gb_production = df_gb_production[required_gb_columns].fillna(0)
+            df_gb_production = df_gb_production.dropna(subset=["Date"])
+            df_gb_production["Date"] = df_gb_production["Date"].astype(str)
+
+            selected_date = st.selectbox("Select Date", df_gb_production["Date"].unique())
+            filtered_df = df_gb_production[df_gb_production["Date"] == selected_date].copy()
+            if filtered_df.empty:
+                st.error("No data available for the selected date.")
+                return
+
+            filtered_df = filtered_df.drop(columns=["Date"])
+
+            # 🔥 Use left merge to retain ALL parts from "Date wise made here"
+            merged_df = pd.merge(
+                filtered_df,
+                df_norms_master,
+                left_on="Part No",
+                right_on="Material",
+                how="left"
+            )
+
+            # Clean up redundant columns
+            merged_df = merged_df.drop(columns=["Material"], errors="ignore").fillna(0)
+
+            # Remove '.' characters
+            merged_df = merged_df.replace({r'\.': ''}, regex=True)
+
+            # Force numeric conversion
+            numeric_columns = ["Current MH", "Hard WIP", "HT WIP", "Soft WIP", "Rough WIP", "Norms"]
+            for col in numeric_columns:
+                merged_df[col] = pd.to_numeric(merged_df[col], errors='coerce').fillna(0).astype(int)
+
+            # Remove rows where Norm is zero (optional; can be removed if needed)
+            merged_df = merged_df[merged_df["Norms"] != 0]
+
+            # Reorder columns
+            desired_order = ["Part No", "FMS", "Norms", "Cat", "Current MH", "Hard WIP", "HT WIP","Soft WIP", "Rough WIP"]
+            merged_df = merged_df[desired_order]
+
+            # Conditional Formatting Function
+            def highlight_current_mh(row):
+                if pd.notna(row["Current MH"]) and pd.notna(row["Norms"]):
+                    value = (row["Current MH"] * row["Norms"]) / 100
+                    if row["Current MH"] > row["Norms"]:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value > 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 33 < value <= 67:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif 0 < value <= 33:
+                        return ["background-color: red" if col == "Current MH" else "" for col in merged_df.columns]
+                    elif value == 0:
+                        return ["" if col == "Current MH" else "" for col in merged_df.columns]
+                return [""] * len(merged_df.columns)
+
+            styled_df = merged_df.style.apply(highlight_current_mh, axis=1)
+            st.subheader("Merged Data Preview")
+            st.dataframe(styled_df)
+
+            # Excel export with coloring
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                merged_df.to_excel(writer, index=False, sheet_name='Sheet1')
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                # Define fill styles
+                green_fill = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")
+                yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+                white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+                black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+
+                current_mh_col = None
+                for idx, col in enumerate(merged_df.columns, 1):
+                    if col == "Current MH":
+                        current_mh_col = idx
+                        break
+
+                if current_mh_col:
+                    for row in range(2, len(merged_df) + 2):  # headers at row 1
+                        cell = worksheet.cell(row=row, column=current_mh_col)
+                        norm_value = merged_df.iloc[row - 2]["Norms"]
+                        if pd.notna(cell.value) and pd.notna(norm_value):
+                            value = (cell.value * norm_value) / 100
+                            if cell.value > norm_value:
+                                cell.fill = white_fill
+                            elif value > 67:
+                                cell.fill = green_fill
+                            elif 33 < value <= 67:
+                                cell.fill = yellow_fill
+                            elif 0 < value <= 33:
+                                cell.fill = red_fill
+                            elif value == 0:
+                                cell.fill = black_fill
+
+            output.seek(0)
+            st.download_button(
+                label="Download Processed Data",
+                data=output,
+                file_name="Norms_Master_red.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            st.write("Detailed Error Traceback:")
+            st.exception(e)
+
+
+
 def two_week_w_al():
     # Title of the app
     st.title('2-week-with-alternative')
@@ -2108,16 +2881,11 @@ def main():
     
     
     st.sidebar.title("Navigation")
-    menu = ["Login", "Register", "Logout", "Dashboard"]
+    menu = [ "Dashboard"]
     choice = st.sidebar.selectbox("Menu", menu)
 
-    if choice == "Login":
-        login()
-    elif choice == "Register":
-        register()
-    elif choice == "Logout":
-        logout()
-    elif choice == "Dashboard":
+
+    if choice == "Dashboard":
         app_functionality()
 
 # Define the other functions here (e.g., Gbreq, Month, etc.)
